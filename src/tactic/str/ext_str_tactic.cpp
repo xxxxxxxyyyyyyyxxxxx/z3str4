@@ -280,7 +280,7 @@ class ext_str_tactic : public tactic {
                 if (u.str.is_replace(rhs)) { 
 					expr* inthis; expr* replacethis; expr* bythis;
 					u.str.is_replace(rhs, inthis, replacethis, bythis);
-					if(u.str.is_string(replacethis, a) && u.str.is_string(bythis, b) && a != b){
+					if(lhs == inthis && u.str.is_string(replacethis, a) && u.str.is_string(bythis, b) && a != b){
 						//std::cout << "Rewrite 15: x = replace(x, a, b) -> not x in regex .* a .* " <<  std::endl;	
 						expr_ref string_expr(u.str.mk_string(a), m);
 						expr_ref string_expr_re(u.re.mk_to_re(string_expr), m);
@@ -299,7 +299,7 @@ class ext_str_tactic : public tactic {
 				if (u.str.is_replace(lhs)) { 
 					expr* inthis; expr* replacethis; expr* bythis;
 					u.str.is_replace(lhs, inthis, replacethis, bythis);
-					if(u.str.is_string(replacethis, a) && u.str.is_string(bythis, b) && a != b){
+					if(rhs == inthis && u.str.is_string(replacethis, a) && u.str.is_string(bythis, b) && a != b){
 						//std::cout << "Rewrite 15: x = replace(x, a, b) -> not x in regex .* a .* " <<  std::endl;	
 						expr_ref string_expr(u.str.mk_string(a), m);
 						expr_ref string_expr_re(u.re.mk_to_re(string_expr), m);
@@ -454,7 +454,7 @@ class ext_str_tactic : public tactic {
 
                 if (rewrite_applies) {
                     TRACE("ext_str_tactic", tout << "str.indexof >= 0 rewrite applies: " << mk_pp(haystack, m) << " contains " << mk_pp(needle, m) << std::endl;);
-					//std::cout << "Rewrite: (str.indexof H N 0) >= 0 --> (str.contains H N)" << std::endl;
+					std::cout << "Rewrite: (str.indexof H N 0) >= 0 --> (str.contains H N)" << std::endl;
                     expr_ref h_in_n(u.str.mk_contains(haystack, needle), m);
                     sub.insert(ge, h_in_n);
                 }
@@ -671,7 +671,7 @@ class ext_str_tactic : public tactic {
 					u.str.is_extract(haystack, inthis, fromhere, substrlen);
 					expr* substrlen_inner; u.str.is_length(substrlen, substrlen_inner);
 					if(needle == substrlen_inner){
-						//std::cout << "Rewrite 28: contains(substring x n |y|)) y) -> y = substring (x,n,|y|) " <<  std::endl;
+						//~ std::cout << "Rewrite 28: contains(substring x n |y|)) y) -> y = substring (x,n,|y|) " <<  std::endl;
 						expr_ref new_eq(m.mk_eq(needle, haystack), m);
 						//~ std::cout << mk_pp(new_eq, m) << std::endl;
 						sub.insert(contains, new_eq);
@@ -689,7 +689,7 @@ class ext_str_tactic : public tactic {
 					expr* inthis; expr* replacethis; expr* bythis;
 					u.str.is_replace(haystack, inthis, replacethis, bythis);
 					if(inthis == bythis && replacethis == needle){
-						//std::cout << "Rewrite 29: contains(replace(x,y,x), y) -> contains(x,y) " <<  std::endl;
+						//~ std::cout << "Rewrite 29: contains(replace(x,y,x), y) -> contains(x,y) " <<  std::endl;
 						expr_ref new_contains(u.str.mk_contains(inthis, needle), m);
 						//std::cout << mk_pp(new_contains, m) << std::endl;
 						sub.insert(contains, new_contains);
@@ -705,7 +705,7 @@ class ext_str_tactic : public tactic {
 					expr* inthis; expr* replacethis; expr* bythis;
 					u.str.is_replace(needle, inthis, replacethis, bythis);
 					if(inthis == bythis && replacethis == haystack){
-						//std::cout << "Rewrite 33: contains(x, replace(y,x,y)) -> contains(x,y) " <<  std::endl;
+						//~ std::cout << "Rewrite 33: contains(x, replace(y,x,y)) -> contains(x,y) " <<  std::endl;
 						expr_ref new_contains(u.str.mk_contains(haystack, inthis), m);
 						//std::cout << mk_pp(new_contains, m) << std::endl;
 						sub.insert(contains, new_contains);
@@ -734,7 +734,7 @@ class ext_str_tactic : public tactic {
 					expr* innerbase; expr* innerfind; expr* innersubs;
 					u.str.is_replace(replacefind, innerbase, innerfind, innersubs);
 					if(replacebase == innerbase && replacebase == innersubs && replacebase == replacesubs){
-						//std::cout << "Rewrite 43: replace(x, replace(x,y,x), x) = x " <<  std::endl;
+						//~ std::cout << "Rewrite 43: replace(x, replace(x,y,x), x) = x " <<  std::endl;
 						//std::cout << mk_pp(replacebase, m) << std::endl;
 						sub.insert(replace, replacebase);
 						stack.push_back(replacebase);
@@ -749,7 +749,7 @@ class ext_str_tactic : public tactic {
 					expr* innerbase; expr* innerfind; expr* innersubs;
 					u.str.is_replace(replacefind, innerbase, innerfind, innersubs);
 					if(replacebase == innerfind && innerbase == innersubs){
-						//std::cout << "Rewrite 44: replace(x, replace(y,x,y), w) = replace(x,y,w) " <<  std::endl;
+						//~ std::cout << "Rewrite 44: replace(x, replace(y,x,y), w) = replace(x,y,w) " <<  std::endl;
 						expr_ref new_repl(u.str.mk_replace(replacebase, innerbase, replacesubs), m);
 						//~ std::cout << mk_pp(new_repl, m) << std::endl;
 						sub.insert(replace, new_repl);
@@ -1019,14 +1019,15 @@ class ext_str_tactic : public tactic {
 			//~ }
 			//~ std::cout << "Aggregates End" << std::endl;
 
-			//std::cout << "post rewrite ast ##################################" << std::endl;
-			//size = g->size();
+            /*
+			std::cout << "post rewrite ast ##################################" << std::endl;
+			size = g->size();
 			//Print out the post-rewrite formula
-            // for (unsigned idx = 0; idx < size; ++idx) {
-            //     if (g->inconsistent()) break;
-            //    expr* curr = g->form(idx);
-			//	std::cout << mk_pp(curr, m) << std::endl;
-			//}
+            for (unsigned idx = 0; idx < size; ++idx) {
+                if (g->inconsistent()) break;
+                expr* curr = g->form(idx);
+				std::cout << mk_pp(curr, m) << std::endl;
+			}*/
 			
 			
             /*
