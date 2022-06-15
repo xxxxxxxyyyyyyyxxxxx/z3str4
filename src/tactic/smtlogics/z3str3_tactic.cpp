@@ -30,9 +30,9 @@ Notes:
 #include "tactic/core/ctx_simplify_tactic.h"
 
 
-/*
+
 // conjunctive fragment := cf
-static bool is_cf_helper(ast_manager &m, expr * f, bool sign) 
+static bool is_cf_helper(ast_manager &m, expr * f, bool sign)
 {
     seq_util u(m);
 
@@ -210,13 +210,14 @@ public:
 probe * mk_has_regex_probe() {
     return alloc(has_regex_probe);
 }
-*/
+
 tactic * mk_rewriter_tactic(ast_manager & m, params_ref const & p) {
     smt_params m_smt_params;
     m_smt_params.updt_params(p);
    return and_then(mk_simplify_tactic(m, p), and_then(mk_ctx_simplify_tactic(m, p), and_then(mk_ext_str_tactic(m, p), mk_simplify_tactic(m, p))));
 }
 
+/*
 tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
     smt_params m_smt_params;
     m_smt_params.updt_params(p);
@@ -229,8 +230,9 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
     //return using_params(mk_smt_tactic(m), seq_p);
 
 }
+}*/
 
-/*
+
 tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
     smt_params m_smt_params;
     m_smt_params.updt_params(p);
@@ -273,7 +275,7 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
 
     tactic * z3str3_1 = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), preprocess_p);
     tactic * z3seq = nullptr;
-    
+
     if (m_smt_params.m_StrTactic == symbol("all")) {
         // apply all tactics in the portfolio
         z3seq       = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
@@ -320,16 +322,6 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
         tactic * st = using_params(and_then(mk_rewriter_tactic(m, p), or_else(z3seqBefore, z3str3_2)), p);
         return st;
-    } else if (m_smt_params.m_StrTactic == symbol("ml")) {
-        // machine-learning arm selection
-        z3seq = using_params(mk_smt_tactic(m), seq_p);
-        tactic * ml = mk_str_ml_tactic(m, p, z3str3_1, z3str3_2, z3seq);
-        tactic * st = using_params(and_then(mk_rewriter_tactic(m, p), ml), p);
-        return st;
-    } else if (m_smt_params.m_StrTactic == symbol("cheese")) {
-        tactic * cheese = mk_string_cheese_tactic(m, p);
-        tactic * st = using_params(and_then(mk_rewriter_tactic(m, p), cheese), p);
-        return st;
     } else if (m_smt_params.m_StrTactic == symbol("2probe")) {
         seq_p.set_uint("seq.giveup_point", 7);
         tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
@@ -370,7 +362,7 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tactic * tree = cond(mk_has_regex_probe(), regextrue, regexfalse);
 
         tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
-        
+
         return st;
     } else {
         // unknown tactic
@@ -378,5 +370,4 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         return nullptr;
     }
 
-}*/
-
+}

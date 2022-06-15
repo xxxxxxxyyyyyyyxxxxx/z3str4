@@ -106,11 +106,54 @@ struct theory_str_params {
     bool m_FixedLengthRefinement = false;
 
     /*
+     * PreMilliseconds is the number of milliseconds to try the sequence solver on disjunctive fragment queries.
+     */
+    unsigned m_PreMilliseconds = 1000;
+    /*
+    * If MultisetCheck is true, we use the quick multiset check to
+    * help solve word equations.
+    */
+    bool m_MultisetCheck = false;
+    /*
+     * If rewriterTactic is true, we apply a global formula rewriter prior to SMT solving.
+     * This can enable simplifications that aren't caught by the local term rewriter.
+     */
+    bool m_RewriterTactic = true;
+    /*
+     * StrTactic allows bypassing of the portfolio selection in z3str3_tactic for testing.
+     * The options are:
+     * 0 (default) - all tactics are used
+     * 1 - length abstraction and fixed-length solving
+     * 2 - arrangement solver (traditional Z3str)
+     */
+    symbol m_StrTactic = symbol("z3str4");
+
+
+    /*
      * If FixedLengthNaiveCounterexamples is true and the fixed-length equation solver is enabled,
      * Z3str3 will only construct simple counterexamples to block unsatisfiable length assignments
      * instead of attempting to learn more complex lessons.
      */
     bool m_FixedLengthNaiveCounterexamples = true;
+
+    /*
+     * If ShareConstraints is true, Z3str3 will mark certain axioms and conflict clauses as "shared" and
+     * will propagate them to other solvers if it fails to find a solution.
+     * This has no effect outside of the portfolio tactic or if no other tactic is called after Z3str3 runs.
+     */
+    bool m_ShareConstraints = true;
+    bool m_SearchOverlaps = false;
+    unsigned m_SearchOverlapsMilliseconds = 1000;
+    bool m_FixedLengthPreprocessing = false;
+    unsigned m_FixedLengthIterations = 5;
+    // Enables the regex prefix/suffix heuristic, which checks for common prefixes/suffixes of intersected regex constraints.
+    bool m_UseRegexPrefixSuffixHeuristic = true;
+    // Construct full length constraints for automata when expected to be linear.
+    bool m_RegexAutomata_ConstructLinearLengthConstraints = true;
+
+    // Construct lower/upper bounds for regex automata.
+    bool m_RegexAutomata_ConstructBounds = true;
+
 
     theory_str_params(params_ref const & p = params_ref()) {
         updt_params(p);
@@ -119,4 +162,3 @@ struct theory_str_params {
     void updt_params(params_ref const & p);
     void display(std::ostream & out) const;
 };
-
