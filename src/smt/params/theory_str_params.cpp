@@ -34,7 +34,22 @@ void theory_str_params::updt_params(params_ref const & _p) {
     m_RegexAutomata_FailedIntersectionThreshold = p.str_regex_automata_failed_intersection_threshold();
     m_RegexAutomata_LengthAttemptThreshold = p.str_regex_automata_length_attempt_threshold();
     m_FixedLengthRefinement = p.str_fixed_length_refinement();
+
+    m_PreMilliseconds = p.str_pre_milliseconds();
+    m_MultisetCheck = p.str_multiset_check();
+    m_RewriterTactic = p.str_rewriter_tactic();
+    m_StrTactic = p.str_tactic();
+
     m_FixedLengthNaiveCounterexamples = p.str_fixed_length_naive_cex();
+
+    m_ShareConstraints = p.str_share_constraints();
+    m_SearchOverlaps = p.str_search_overlaps();
+    m_SearchOverlapsMilliseconds = p.str_search_overlaps_milliseconds();
+    m_FixedLengthPreprocessing = p.str_fixed_length_preprocessing();
+    m_FixedLengthIterations = p.str_fixed_length_iterations();
+    m_UseRegexPrefixSuffixHeuristic = p.str_regex_prefix_heuristic();
+    m_RegexAutomata_ConstructLinearLengthConstraints = p.str_regex_automata_construct_linear_length_constraints();
+    m_RegexAutomata_ConstructBounds = p.str_regex_automata_construct_bounds();
 }
 
 #define DISPLAY_PARAM(X) out << #X"=" << X << std::endl;

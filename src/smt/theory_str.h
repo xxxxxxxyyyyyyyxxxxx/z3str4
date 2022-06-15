@@ -495,6 +495,10 @@ protected:
     unsigned preprocessing_iteration_count; // number of attempts we've made to solve by preprocessing length information
     obj_map<expr, zstring> candidate_model;
 
+    expr_ref_vector fixed_length_transcendent_axioms; // learned clauses to carry over between different SMT solvers across tactics
+
+    expr_ref_vector bitvector_character_constants; // array-indexed map of bv.mk_numeral terms
+
     stats m_stats;
 
 protected:
@@ -539,6 +543,11 @@ protected:
     void try_eval_concat(enode * cat);
     void instantiate_basic_string_axioms(enode * str);
     void instantiate_str_eq_length_axiom(enode * lhs, enode * rhs);
+
+    void multiset_check(expr * lhs, expr * rhs);
+    bool is_unsat_under_multiset_check(expr * lhs, expr * rhs);
+    bool get_sets(expr * ex, std::set<expr*> *characterSet, std::set<expr*> *varSet);
+    bool get_multisets(expr * ex,  std::multiset<expr*> *c_set, std::multiset<expr*> *v_set);
 
     // for count abstraction and refinement
     expr* refine(expr* lhs, expr* rhs, rational offset);
@@ -743,6 +752,7 @@ public:
     void collect_statistics(::statistics & st) const override;
 
     bool overlapping_variables_detected() const { return loopDetected; }
+    expr_ref_vector get_transcendent_axioms() const { return fixed_length_transcendent_axioms; }
 
     trail_stack& get_trail_stack() { return m_trail_stack; }
     void merge_eh(theory_var, theory_var, theory_var v1, theory_var v2) {}

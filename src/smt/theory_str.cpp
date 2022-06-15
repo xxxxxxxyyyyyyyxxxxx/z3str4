@@ -31,6 +31,9 @@
 #include "smt_kernel.h"
 #include "model/model_smt2_pp.h"
 
+#include <chrono>
+using namespace std::chrono;
+
 namespace smt {
 
 
@@ -89,7 +92,10 @@ namespace smt {
         m_library_aware_trail_stack(),
         m_find(*this),
         fixed_length_subterm_trail(m),
-        fixed_length_assumptions(m)
+        fixed_length_assumptions(m),
+        preprocessing_iteration_count(0),
+        fixed_length_transcendent_axioms(m),
+        bitvector_character_constants(m)
     {
     }
 
@@ -1201,6 +1207,12 @@ namespace smt {
         ast_manager & m = get_manager();
 
         app * ex = e->get_expr();
+
+        if (m_params.m_FixedLengthPreprocessing) {
+            TRACE("str", tout << "skipping axiom setup on " << mk_pp(ex, m) << ": preprocessing to character-solver encoding" << std::endl;);
+            return;
+        }
+
         if (axiomatized_terms.contains(ex)) {
             TRACE("str", tout << "already set up Contains axiom for " << mk_pp(ex, m) << std::endl;);
             return;
@@ -6489,6 +6501,14 @@ namespace smt {
             return;
         }
 
+        if (m_params.m_FixedLengthPreprocessing) {
+            if (m_params.m_MultisetCheck) {
+                multiset_check(lhs, rhs);
+            }
+	        instantiate_str_eq_length_axiom(ctx.get_enode(lhs), ctx.get_enode(rhs));
+            return;
+        }
+
         if (u.str.is_concat(to_app(lhs)) && u.str.is_concat(to_app(rhs))) {
             bool nn1HasEqcValue = false;
             bool nn2HasEqcValue = false;
@@ -6829,6 +6849,10 @@ namespace smt {
     }
 
     void theory_str::add_theory_assumptions(expr_ref_vector & assumptions) {
+        if (m_params.m_FixedLengthPreprocessing) {
+            // don't add this assumption if we're only preprocessing
+            return;
+        }
         TRACE("str", tout << "add overlap assumption for theory_str" << std::endl;);
         const char* strOverlap = "!!TheoryStrOverlapAssumption!!";
         sort * s = get_manager().mk_bool_sort();
@@ -6855,6 +6879,11 @@ namespace smt {
     }
 
     void theory_str::init_search_eh() {
+
+        context & ctx = get_context();
+        if (m_params.m_FixedLengthPreprocessing) {
+            TRACE("str", tout << "NOTE: using fixed length preprocessing -- normal processing DISABLED" << std::endl;);
+        }
 
         reset_internal_data_structures();
 
@@ -8280,6 +8309,123 @@ namespace smt {
         TRACE_CODE(if (is_trace_enabled("t_str_dump_assign")) { dump_assignments(); });
         check_variable_scope();
 
+        if (m_params.m_FixedLengthPreprocessing) {
+            TRACE("str", tout << "preprocessing in final check, iteration " << preprocessing_iteration_count << std::endl;);
+            candidate_model.reset();
+            arith_value v(get_manager());
+            v.init(&get_context());
+            final_check_status arith_fc_status = v.final_check();
+            if (arith_fc_status != FC_DONE) {
+                TRACE("str_fl", tout << "arithmetic solver not done yet, continuing search" << std::endl;);
+                return FC_CONTINUE;
+            }
+            TRACE("str_fl", tout << "arithmetic solver done in final check" << std::endl;);
+
+            if (!solve_regex_automata()) {
+                TRACE("str", tout << "regex engine requested to give up!" << std::endl;);
+                return FC_GIVEUP;
+            }
+
+            expr_ref_vector assignments(m);
+            ctx.get_assignments(assignments);
+
+            expr_ref_vector precondition(m);
+            obj_map<expr, zstring> model;
+            expr_ref_vector cex(m);
+            expr_ref_vector toplevel_vars(m);
+            for (auto &e : variable_set) {
+                toplevel_vars.push_back(e);
+            }
+
+            auto start = high_resolution_clock::now();
+            lbool model_status = fixed_length_model_construction(assignments, precondition, toplevel_vars, model, cex);
+            auto stop = high_resolution_clock::now();
+            auto duration = duration_cast<milliseconds>(stop - start);
+
+            if (model_status == l_true) {
+                // SAT
+                TRACE("str_fl", tout << "subsolver found SAT -- validating model" << std::endl;);
+
+                smt_params subsolver_params;
+                subsolver_params.m_string_solver = symbol("seq");
+                smt::kernel subsolver(m, subsolver_params);
+                subsolver.set_logic(symbol("QF_S"));
+
+                // check satisfiability of (assignment AND precondition AND model)
+
+                for (expr * ex : assignments) {
+                    if (!get_context().is_relevant(ex)) {
+                        TRACE("str_fl", tout << "skip asserting assignment to subsolver " << mk_pp(ex, m) << ", not relevant" << std::endl;);
+                        continue;
+                    }
+                    TRACE("str_fl", tout << "asserting assignment to subsolver " << mk_pp(ex, m) << std::endl;);
+                    subsolver.assert_expr(ex);
+                }
+                for (auto ex : precondition) {
+                    subsolver.assert_expr(ex);
+                }
+                for (auto entry : model) {
+                    subsolver.assert_expr(subsolver.get_context().mk_eq_atom(entry.m_key, mk_string(entry.m_value)));
+                }
+                TRACE("str_fl", tout << "validating model in subsolver" << std::endl;);
+                lbool validation_result = subsolver.setup_and_check();
+                if (validation_result == l_true) {
+                    // SAT
+                    TRACE("str_fl", tout << "model is valid" << std::endl;);
+                    candidate_model = model;
+                    m_stats.m_solved_by = 1;
+                    return FC_DONE;
+                } else {
+                    TRACE("str_fl", tout << "model is not valid -- generating conflict clause" << std::endl;);
+                    preprocessing_iteration_count += 1;
+                    m_stats.m_fixed_length_iterations++;
+                    if (preprocessing_iteration_count >= m_params.m_FixedLengthIterations) {
+                        TRACE("str_fl", tout << "fixed-length preprocessing took too many iterations -- giving up!" << std::endl;);
+                        return FC_GIVEUP;
+                    }
+                    // negate (precondition AND model) and assert this as conflict clause
+                    expr_ref_vector conflict(m);
+                    for (auto ex : precondition) {
+                        conflict.push_back(ex);
+                    }
+                    for (auto entry : model) {
+                        conflict.push_back(ctx.mk_eq_atom(entry.m_key, mk_string(entry.m_value)));
+                    }
+                    expr_ref final_conflict(m.mk_not(mk_and(conflict)), m);
+                    assert_axiom(final_conflict);
+                    add_persisted_axiom(final_conflict);
+                    return FC_CONTINUE;
+                }
+            } else if (model_status == l_false) {
+                // UNSAT
+                preprocessing_iteration_count += 1;
+                m_stats.m_fixed_length_iterations++;
+                if (preprocessing_iteration_count >= m_params.m_FixedLengthIterations) {
+                    TRACE("str_fl", tout << "fixed-length preprocessing took too many iterations -- giving up!" << std::endl;);
+                    return FC_GIVEUP;
+                }
+                // whatever came back in CEX is the conflict clause.
+                // negate its conjunction and assert that
+                expr_ref conflict(m.mk_not(mk_and(cex)), m);
+                TRACE("str_fl", tout << "asserting " << mk_ismt2_pp(conflict, m) << std::endl;);
+                assert_axiom(conflict);
+                add_persisted_axiom(conflict);
+                fixed_length_transcendent_axioms.push_back(conflict);
+                return FC_CONTINUE;
+            } else {
+                // UNKNOWN
+                preprocessing_iteration_count += 1;
+                m_stats.m_fixed_length_iterations++;
+                if (preprocessing_iteration_count >= m_params.m_FixedLengthIterations) {
+                    TRACE("str_fl", tout << "fixed-length preprocessing took too many iterations -- giving up!" << std::endl;);
+                    return FC_GIVEUP;
+                }
+                TRACE("str_fl", tout << "fixed-length model construction found missing side conditions; continuing search" << std::endl;);
+                return FC_CONTINUE;
+            }
+        }
+
+
         if (opt_DeferEQCConsistencyCheck) {
             TRACE("str", tout << "performing deferred EQC consistency check" << std::endl;);
             std::set<enode*> eqc_roots;
@@ -8718,6 +8864,133 @@ namespace smt {
 
     void theory_str::display(std::ostream & out) const {
         out << "TODO: theory_str display" << std::endl;
+    }
+
+    bool theory_str::is_unsat_under_multiset_check(expr * lhs, expr * rhs) {
+        std::multiset<expr*> left_v_set;
+        std::multiset<expr*> left_c_set;
+        if(!get_multisets(lhs, &left_c_set, &left_v_set)){
+            return false;
+        }
+
+        std::multiset<expr*> right_v_set;
+        std::multiset<expr*> right_c_set;
+        if(!get_multisets(rhs, &right_c_set, &right_v_set)){
+            return false;
+        }
+
+        if (left_v_set == right_v_set && left_c_set != right_c_set) {
+            return true;
+        }
+        return false;
+    }
+
+    /*
+     * Quickly check that we can balance the equations
+     */
+    void theory_str::multiset_check(expr * lhs, expr * rhs) {
+        if (is_unsat_under_multiset_check(lhs, rhs)) {
+            context & ctx = get_context();
+            ast_manager & m = get_manager();
+            // build premise: (lhs == rhs)
+            expr_ref premise(ctx.mk_eq_atom(lhs, rhs), m);
+            TRACE("str_fl", tout << "Multiset Contradiction! " << mk_ismt2_pp(premise, m) << std::endl;);
+            // build false
+            expr_ref conflict(m.mk_false(), m);
+            assert_implication(premise, conflict);
+        }
+    }
+
+    bool theory_str::get_multisets(expr * ex,  std::multiset<expr*> *c_set, std::multiset<expr*> *v_set) {
+        ast_manager & m = get_manager();
+
+        sort * ex_sort = ex->get_sort();
+        sort * str_sort = u.str.mk_string_sort();
+
+        TRACE("str_fl", tout << "Getting vars/literal characters in " << mk_ismt2_pp(ex, m) << std::endl;);
+
+        if (ex_sort == str_sort) {
+            if (is_app(ex)) {
+                app * ap = to_app(ex);
+                if (ap->get_num_args() == 0) {
+                    if (u.str.is_string(ap)) {
+                        bool str_exists;
+                        expr * str = get_eqc_value(ex, str_exists);
+                        SASSERT(str_exists);
+                        zstring str_const;
+                        u.str.is_string(str, str_const);
+                        // get characters/vars out of str_const
+                        for(size_t i = 0; i < str_const.length(); i++)
+                        {
+                            TRACE("str_fl", tout << "adding " << str_const.extract(i, 1) << " to c_set" << std::endl;);
+                            c_set->insert(mk_string(str_const.extract(i, 1)));
+                        }
+                    }else{
+                        TRACE("str_fl", tout << "adding " << mk_ismt2_pp(ap, m) << " to v_set" << std::endl;);
+                        v_set->insert(ap);
+                    }
+                    return true;
+                }else if(u.str.is_concat(ap)){
+                    unsigned num_args = ap->get_num_args();
+                    for (unsigned i = 0; i < num_args; i++) {
+                        if (!get_multisets(ap->get_arg(i), c_set, v_set)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }else{
+                    TRACE("str_fl", tout << "Unsupported Multiset_check " << mk_ismt2_pp(ap, m) << ": quiting." << std::endl;);
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool theory_str::get_sets(expr * ex,  std::set<expr*> *characterSet, std::set<expr*> *varSet) {
+        ast_manager & m = get_manager();
+
+        TRACE("str_fl", tout << "Getting vars/literal characters in " << mk_ismt2_pp(ex, m) << std::endl;);
+
+        sort * ex_sort = ex->get_sort();
+        sort * str_sort = u.str.mk_string_sort();
+
+        if (ex_sort == str_sort) {
+            if (is_app(ex)) {
+                app * ap = to_app(ex);
+                if (ap->get_num_args() == 0) {
+                    if (u.str.is_string(ap)) {
+                        bool str_exists;
+                        expr * str = get_eqc_value(ex, str_exists);
+                        SASSERT(str_exists);
+                        zstring str_const;
+                        u.str.is_string(str, str_const);
+                        // get characters/vars out of str_const
+                        for(size_t i = 0; i < str_const.length(); i++)
+                        {
+                            TRACE("str_fl", tout << "adding " << str_const.extract(i, 1) << " to c_set" << std::endl;);
+                            characterSet->insert(mk_string(str_const.extract(i, 1)));
+                        }
+                    }else{
+                        TRACE("str_fl", tout << "adding " << mk_ismt2_pp(ap, m) << " to v_set" << std::endl;);
+                        varSet->insert(ap);
+                    }
+                    return true;
+                }else if(u.str.is_concat(ap)){
+                    unsigned num_args = ap->get_num_args();
+                    for (unsigned i = 0; i < num_args; i++) {
+                        if (!get_sets(ap->get_arg(i), characterSet, varSet)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }else{
+                    TRACE("str_fl", tout << "Not a char or var! " << mk_ismt2_pp(ap, m) << " quiting." << std::endl;);
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     rational theory_str::get_refine_length(expr* ex, expr_ref_vector& extra_deps){
