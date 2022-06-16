@@ -452,6 +452,11 @@ namespace smt {
 
         // TODO reuse some of the automaton framework from theory_str_regex
         eautomaton * aut = m_mk_aut(re);
+
+        if (aut == nullptr) {
+            m.raise_exception("regex contains non-constant term or other non-supported expression");
+        }
+
         aut->compress();
 
         expr_ref_vector str_chars(m);
@@ -688,6 +693,9 @@ namespace smt {
             // ==> (Substr ...) = ""
             if (pos.is_neg() || pos >= rational(base_chars.size()) || len.is_neg()) {
                 eqc_chars.reset();
+
+                fixed_length_used_len_terms.insert(term, rational::zero());
+
                 return true;
             }
             else if (!pos.is_unsigned() || !len.is_unsigned()) {
@@ -695,17 +703,25 @@ namespace smt {
             } else {
                 unsigned _pos = pos.get_unsigned();
                 unsigned _len = len.get_unsigned();
-                if (_pos + _len < _pos) 
+                if (_pos + _len < _pos)
                     return false;
                 if (_pos + _len >= base_chars.size()) {
                     // take as many characters as possible up to the end of base_chars
+
+                    rational count = rational::zero();
+
                     for (unsigned i = _pos; i < base_chars.size(); ++i) {
                         eqc_chars.push_back(base_chars.get(i));
+                        count++;
                     }
+                    fixed_length_used_len_terms.insert(term, count);
                 } else {
+                    rational count = rational::zero();
                     for (unsigned i = _pos; i < _pos + _len; ++i) {
                         eqc_chars.push_back(base_chars.get(i));
+                        count++;
                     }
+                    fixed_length_used_len_terms.insert(term, count);
                 }
             }
         } else if (u.str.is_at(term, arg0, arg1)) {
@@ -1109,6 +1125,8 @@ namespace smt {
                         expr_ref stoi_cex(m_autil.mk_ge(mk_strlen(arg), mk_int(0)), m);
                         assert_axiom(stoi_cex);
                         add_persisted_axiom(stoi_cex);
+
+
                         return l_undef;
                     }
                     TRACE("str_fl", tout << "length of term is " << slen << std::endl;);
@@ -1126,18 +1144,36 @@ namespace smt {
                             zstring arg_val = padding + ival_str;
                             expr_ref stoi_cex(m);
                             expr_ref arg_char_expr(mk_string(arg_val), m);
-                            
+
                             // Add (e == ival) as a precondition.
                             precondition.push_back(m.mk_eq(e, mk_int(ival)));
                             // Assert (arg == arg_chars) in the subsolver.
                             if (!fixed_length_reduce_eq(subsolver, arg, arg_char_expr, stoi_cex)) {
                                 // Counterexample: (str.to_int S) == ival AND len(S) == slen cannot both be true.
                                 stoi_cex = expr_ref(m.mk_not(m.mk_and(
-                                    m.mk_eq(e, mk_int(ival)), 
+                                    m.mk_eq(e, mk_int(ival)),
                                     m.mk_eq(mk_strlen(arg), mk_int(slen))
                                 )), m);
                                 assert_axiom(stoi_cex);
                                 add_persisted_axiom(stoi_cex);
+
+
+                                // TESTING:
+                                // If len(S) := slen, (str.to_int S) < 10^slen
+                                // (This may not be useful if slen is very large.)
+                                if (slen.is_unsigned() && slen <= rational(10)) {
+                                    unsigned slen_u = slen.get_unsigned();
+                                    rational ten_to_slen = rational(10).expt(slen_u);
+                                    TRACE("str_fl", tout << "asserting str.to_int upper bound: len=" << slen_u << " -> str.to_int < " << ten_to_slen << std::endl;);
+                                    expr_ref stoi_upper_bound = expr_ref(rewrite_implication(
+                                        m.mk_eq(mk_strlen(arg), mk_int(slen)),
+                                        m_autil.mk_lt(e, mk_int(ten_to_slen))
+                                    ), m);
+                                    th_rewriter rw(m);
+                                    rw(stoi_upper_bound);
+                                    assert_axiom(stoi_upper_bound);
+                                    add_persisted_axiom(stoi_upper_bound);
+                                }
 
                                 return l_undef;
                             }
@@ -1202,7 +1238,7 @@ namespace smt {
                         if (!fixed_length_reduce_eq(subsolver, _e, arg_char_expr, itos_cex)) {
                             // Counterexample: N in (str.from_int N) == ival AND len(str.from_int N) == slen cannot both be true.
                             itos_cex = expr_ref(m.mk_not(m.mk_and(
-                                m.mk_eq(arg, mk_int(ival)), 
+                                m.mk_eq(arg, mk_int(ival)),
                                 m.mk_eq(mk_strlen(e), mk_int(slen))
                             )), m);
                             assert_axiom(itos_cex);
@@ -1267,7 +1303,7 @@ namespace smt {
                   tout << mk_pp(e, m) << std::endl;
               }
               );
-        
+
         TRACE("str_fl", tout << "calling subsolver" << std::endl;);
 
         lbool subproblem_status = subsolver.check(fixed_length_assumptions);

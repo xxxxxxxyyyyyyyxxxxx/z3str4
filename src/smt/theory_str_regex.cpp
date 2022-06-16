@@ -16,6 +16,7 @@
   --*/
 
 #include "smt/theory_str.h"
+#include <cmath>
 
 namespace smt {
 
@@ -62,7 +63,7 @@ namespace smt {
             }
 
             if (!regex_terms_with_length_constraints.contains(str_in_re)) {
-                if (current_assignment == l_true && check_regex_length_linearity(re)) {
+                if (current_assignment == l_true && check_regex_length_linearity(re) && m_params.m_RegexAutomata_ConstructLinearLengthConstraints) {
                     TRACE("str", tout << "regex length constraints expected to be linear -- generating and asserting them" << std::endl;);
 
                     if (regex_term_to_length_constraint.contains(str_in_re)) {
@@ -109,7 +110,7 @@ namespace smt {
             } // re not in regex_terms_with_length_constraints
 
             rational exact_length_value;
-            if (get_len_value(str, exact_length_value)) {
+            if (fixed_length_get_len_value(str, exact_length_value) && m_params.m_RegexAutomata_ConstructBounds) {
                 TRACE("str", tout << "exact length of " << mk_pp(str, m) << " is " << exact_length_value << std::endl;);
 
                 if (regex_terms_with_path_constraints.contains(str_in_re)) {
@@ -192,6 +193,7 @@ namespace smt {
                         regex_inc_counter(regex_length_attempt_count, re);
                         continue;
                     } else {
+                        regex_inc_counter(regex_length_attempt_count, re);
                         // fixed-length model construction handles path constraints on our behalf, and with a better reduction
                         continue;
                     }
@@ -231,27 +233,33 @@ namespace smt {
 
             bool new_lower_bound_info = true;
             bool new_upper_bound_info = true;
-            // check last seen lower/upper bound to avoid performing duplicate work
-            if (regex_last_lower_bound.contains(str)) {
-                rational last_lb_value;
-                regex_last_lower_bound.find(str, last_lb_value);
-                if (last_lb_value == lower_bound_value) {
-                    new_lower_bound_info = false;
-                }
-            }
-            if (regex_last_upper_bound.contains(str)) {
-                rational last_ub_value;
-                regex_last_upper_bound.find(str, last_ub_value);
-                if (last_ub_value == upper_bound_value) {
-                    new_upper_bound_info = false;
-                }
-            }
 
-            if (new_lower_bound_info) {
-                regex_last_lower_bound.insert(str, lower_bound_value);
-            }
-            if (new_upper_bound_info) {
-                regex_last_upper_bound.insert(str, upper_bound_value);
+            if (m_params.m_RegexAutomata_ConstructBounds) {
+                // check last seen lower/upper bound to avoid performing duplicate work
+                if (regex_last_lower_bound.contains(str)) {
+                    rational last_lb_value;
+                    regex_last_lower_bound.find(str, last_lb_value);
+                    if (last_lb_value == lower_bound_value) {
+                        new_lower_bound_info = false;
+                    }
+                }
+                if (regex_last_upper_bound.contains(str)) {
+                    rational last_ub_value;
+                    regex_last_upper_bound.find(str, last_ub_value);
+                    if (last_ub_value == upper_bound_value) {
+                        new_upper_bound_info = false;
+                    }
+                }
+
+                if (new_lower_bound_info) {
+                    regex_last_lower_bound.insert(str, lower_bound_value);
+                }
+                if (new_upper_bound_info) {
+                    regex_last_upper_bound.insert(str, upper_bound_value);
+                }
+            } else {
+                new_lower_bound_info = false;
+                new_upper_bound_info = false;
             }
 
             if (upper_bound_exists && new_upper_bound_info) {
@@ -508,7 +516,6 @@ namespace smt {
                 }
             }
         } // foreach (entry in regex_terms)
-
         for (auto entry : regex_terms_by_string) {
             // TODO do we need to check equivalence classes of strings here?
 
@@ -528,12 +535,14 @@ namespace smt {
                 SASSERT(u.str.is_in_re(str_in_re_term));
                 u.str.is_in_re(str_in_re_term, _unused, re);
 
+                TRACE("str", tout << "consider intersecting regex " << mk_pp(re, m) << std::endl;);
+
                 rational exact_len;
-                bool has_exact_len = get_len_value(str, exact_len);
+                bool has_exact_len = get_len_value(str, exact_len) && m_params.m_RegexAutomata_ConstructBounds;
 
                 rational lb, ub;
-                bool has_lower_bound = lower_bound(mk_strlen(str), lb);
-                bool has_upper_bound = upper_bound(mk_strlen(str), ub);
+                bool has_lower_bound = lower_bound(mk_strlen(str), lb) && m_params.m_RegexAutomata_ConstructBounds;
+                bool has_upper_bound = upper_bound(mk_strlen(str), ub) && m_params.m_RegexAutomata_ConstructBounds;
 
                 if (regex_automaton_assumptions.contains(re) &&
                                                 !regex_automaton_assumptions[re].empty()){
@@ -580,7 +589,155 @@ namespace smt {
 
             eautomaton * aut_inter = nullptr;
             CTRACE("str", !intersect_constraints.empty(), tout << "check intersection of automata constraints for " << mk_pp(str, m) << std::endl;);
+
+            // prefix heuristic
+            if (m_params.m_UseRegexPrefixSuffixHeuristic) {
+                TRACE("str", tout << "applying prefix heuristic" << std::endl;);
+                std::set<zstring> prefixes;
+                for (unsigned c = 0; c <= 255; ++c) {
+                    zstring z(c);
+                    prefixes.insert(z);
+                }
+                bool empty_string_possible = true;
+                expr_ref_vector used_regex_terms(m);
+                for (auto str_in_re_term : str_in_re_terms) {
+                    lbool current_assignment = ctx.get_assignment(str_in_re_term);
+                    if (current_assignment == l_true) {
+                        TRACE("str", tout << "considering prefixes of " << mk_pp(str_in_re_term, m) << std::endl;);
+                        std::set<zstring> prefixes_retained;
+                        std::set<zstring> prefixes_new;
+                        expr * _unused = nullptr;
+                        expr * re = nullptr;
+                        SASSERT(u.str.is_in_re(str_in_re_term));
+                        u.str.is_in_re(str_in_re_term, _unused, re);
+                        if (get_regex_prefixes_of_length_one(re, prefixes_new)) {
+                            used_regex_terms.push_back(re);
+                            for (auto p : prefixes_new) {
+                                if (prefixes.find(p) != prefixes.end()) {
+                                    prefixes_retained.insert(p);
+                                }
+                            }
+                            empty_string_possible &= regex_could_accept_empty_string(re);
+                            prefixes = prefixes_retained;
+                        }
+                    } else {
+                        TRACE("str", tout << "regex term " << mk_pp(str_in_re_term, m) << " not assigned true, skipping" << std::endl;);
+                    }
+                }
+                TRACE("str", tout << "checked " << used_regex_terms.size() << " regex terms" << std::endl;);
+                TRACE("str", {tout << "Length-1 prefixes:" << std::endl;
+                        for (auto p : prefixes) {
+                            tout << p << std::endl;
+                        }
+                    });
+                if (empty_string_possible) {
+                    TRACE("str", tout << "the empty string is a solution to these intersected constraints" << std::endl;);
+                } else {
+                    TRACE("str", tout << "the empty string is NOT a solution to these intersected constraints" << std::endl;);
+                }
+
+                if (prefixes.size() == 0) {
+                    if (empty_string_possible) {
+                        TRACE("str", tout << "asserting empty-string solution" << std::endl;);
+                        // No common prefixes except the empty string.
+                        expr_ref_vector lhs_terms(m);
+                        for (auto re : used_regex_terms) {
+                            expr_ref str_in_re(u.re.mk_in_re(str, re), m);
+                            lhs_terms.push_back(str_in_re);
+                        }
+                        expr_ref lhs(mk_and(lhs_terms), m);
+                        expr_ref rhs(ctx.mk_eq_atom(str, mk_string("")), m);
+                        assert_implication(lhs, rhs);
+                    } else {
+                        TRACE("str", tout << "asserting conflict clause" << std::endl;);
+                        // No common prefixes, and the empty string doesn't work. Conflict!
+                        expr_ref_vector lhs_terms(m);
+                        for (auto re : used_regex_terms) {
+                            expr_ref str_in_re(u.re.mk_in_re(str, re), m);
+                            lhs_terms.push_back(str_in_re);
+                        }
+                        expr_ref lhs(m.mk_not(mk_and(lhs_terms)), m);
+                        assert_axiom(lhs);
+                        add_persisted_axiom(lhs);
+                    }
+                }
+            }
+
+            // suffix heuristic
+            if (m_params.m_UseRegexPrefixSuffixHeuristic) {
+                TRACE("str", tout << "applying suffix heuristic" << std::endl;);
+                std::set<zstring> suffixes;
+                for (unsigned c = 0; c <= 255; ++c) {
+                    zstring z(c);
+                    suffixes.insert(z);
+                }
+                bool empty_string_possible = true;
+                expr_ref_vector used_regex_terms(m);
+                for (auto str_in_re_term : str_in_re_terms) {
+                    TRACE("str", tout << "considering suffixes of " << mk_pp(str_in_re_term, m) << std::endl;);
+                    lbool current_assignment = ctx.get_assignment(str_in_re_term);
+                    if (current_assignment == l_true) {
+                        std::set<zstring> suffixes_retained;
+                        std::set<zstring> suffixes_new;
+                        expr * _unused = nullptr;
+                        expr * re = nullptr;
+                        SASSERT(u.str.is_in_re(str_in_re_term));
+                        u.str.is_in_re(str_in_re_term, _unused, re);
+                        if (get_regex_suffixes_of_length_one(re, suffixes_new)) {
+                            used_regex_terms.push_back(re);
+                            for (auto p : suffixes_new) {
+                                if (suffixes.find(p) != suffixes.end()) {
+                                    suffixes_retained.insert(p);
+                                }
+                            }
+                            empty_string_possible &= regex_could_accept_empty_string(re);
+                            suffixes = suffixes_retained;
+                        }
+                    } else {
+                        TRACE("str", tout << "regex term " << mk_pp(str_in_re_term, m) << " not assigned true, skipping" << std::endl;);
+                    }
+                }
+                TRACE("str", tout << "checked " << used_regex_terms.size() << " regex terms" << std::endl;);
+                TRACE("str", {tout << "Length-1 suffixes:" << std::endl;
+                        for (auto p : suffixes) {
+                            tout << p << std::endl;
+                        }
+                    });
+                if (empty_string_possible) {
+                    TRACE("str", tout << "the empty string is a solution to these intersected constraints" << std::endl;);
+                } else {
+                    TRACE("str", tout << "the empty string is NOT a solution to these intersected constraints" << std::endl;);
+                }
+
+                if (suffixes.size() == 0) {
+                    if (empty_string_possible) {
+                        TRACE("str", tout << "asserting empty-string solution" << std::endl;);
+                        // No common suffixes except the empty string.
+                        expr_ref_vector lhs_terms(m);
+                        for (auto re : used_regex_terms) {
+                            expr_ref str_in_re(u.re.mk_in_re(str, re), m);
+                            lhs_terms.push_back(str_in_re);
+                        }
+                        expr_ref lhs(mk_and(lhs_terms), m);
+                        expr_ref rhs(ctx.mk_eq_atom(str, mk_string("")), m);
+                        assert_implication(lhs, rhs);
+                    } else {
+                        TRACE("str", tout << "asserting conflict clause" << std::endl;);
+                        // No common suffixes, and the empty string doesn't work. Conflict!
+                        expr_ref_vector lhs_terms(m);
+                        for (auto re : used_regex_terms) {
+                            expr_ref str_in_re(u.re.mk_in_re(str, re), m);
+                            lhs_terms.push_back(str_in_re);
+                        }
+                        expr_ref lhs(m.mk_not(mk_and(lhs_terms)), m);
+                        assert_axiom(lhs);
+                        add_persisted_axiom(lhs);
+                    }
+                }
+            }
+
             for (auto aut : intersect_constraints) {
+
                 TRACE("str",
                       {
                           unsigned v = regex_get_counter(regex_length_attempt_count, aut.get_regex_term());
@@ -589,22 +746,34 @@ namespace smt {
                       });
 
                 if (regex_get_counter(regex_length_attempt_count, aut.get_regex_term()) >= m_params.m_RegexAutomata_LengthAttemptThreshold) {
+                    expr * str_in_re_term(u.re.mk_in_re(str, aut.get_regex_term()));
+                    lbool current_assignment = ctx.get_assignment(str_in_re_term);
+                    bool need_to_complement = false;
+                    if ( (current_assignment == l_true && aut.get_polarity()) || (current_assignment == l_false && !aut.get_polarity())) {
+                        need_to_complement = false;
+                    } else {
+                        need_to_complement = true;
+                    }
+
                     unsigned intersectionDifficulty = 0;
-                    if (aut_inter != nullptr) {
-                        intersectionDifficulty = estimate_automata_intersection_difficulty(aut_inter, aut.get_automaton());
+                    if (aut_inter == nullptr) {
+                        if (need_to_complement) {
+                            intersectionDifficulty = estimate_automata_complement_difficulty(aut.get_automaton());
+                        } else {
+                            intersectionDifficulty = 0;
+                        }
+                    } else {
+                        intersectionDifficulty = estimate_automata_intersection_difficulty(aut_inter, aut.get_automaton(), need_to_complement);
                     }
                     TRACE("str", tout << "intersection difficulty is " << intersectionDifficulty << std::endl;);
                     if (intersectionDifficulty <= m_params.m_RegexAutomata_IntersectionDifficultyThreshold
                             || regex_get_counter(regex_intersection_fail_count, aut.get_regex_term()) >= m_params.m_RegexAutomata_FailedIntersectionThreshold) {
 
-                        expr * str_in_re_term(u.re.mk_in_re(str, aut.get_regex_term()));
-                        lbool current_assignment = ctx.get_assignment(str_in_re_term);
                         // if the assignment is consistent with our assumption, use the automaton directly;
                         // otherwise, complement it (and save that automaton for next time)
                         // TODO we should cache these intermediate results
                         // TODO do we need to push the intermediates into a vector for deletion anyway?
-                        if ( (current_assignment == l_true && aut.get_polarity())
-                                || (current_assignment == l_false && !aut.get_polarity())) {
+                        if (!need_to_complement) {
                             if (aut_inter == nullptr) {
                                 aut_inter = aut.get_automaton();
                             } else {
@@ -783,10 +952,23 @@ namespace smt {
         }
     }
 
-    unsigned theory_str::estimate_automata_intersection_difficulty(eautomaton * aut1, eautomaton * aut2) {
+    unsigned theory_str::estimate_automata_intersection_difficulty(eautomaton * aut1, eautomaton * aut2, bool need_to_complement) {
         ENSURE(aut1 != nullptr);
         ENSURE(aut2 != nullptr);
-        return _qmul(aut1->num_states(), aut2->num_states());
+
+        if (need_to_complement) {
+            return _qmul(aut1->num_states(), estimate_automata_complement_difficulty(aut2));
+        } else {
+            return _qmul(aut1->num_states(), aut2->num_states());
+        }
+    }
+
+    unsigned theory_str::estimate_automata_complement_difficulty(eautomaton * aut) {
+        if (aut->num_states() >= 32) {
+            return UINT_MAX;
+        } else {
+            return (unsigned)pow(2.0, aut->num_states());
+        }
     }
 
     // Check whether a regex translates well to a linear set of length constraints.
@@ -1524,6 +1706,218 @@ namespace smt {
         } else {
             counter_map.insert(key, 0);
             return 0;
+        }
+    }
+
+    bool theory_str::get_regex_prefixes_of_length_one(expr * re, std::set<zstring> &prefixes) {
+        std::set<zstring> found_prefixes;
+        if (regex_prefixes_of_length_one.find(re, found_prefixes)) {
+            for (auto p : found_prefixes) {
+                prefixes.insert(p);
+            }
+            return true;
+        } else {
+            if (get_regex_prefixes_of_length_one_uncached(re, found_prefixes)) {
+                regex_prefixes_of_length_one.insert(re, found_prefixes);
+                for (auto p : found_prefixes) {
+                    prefixes.insert(p);
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    bool theory_str::get_regex_suffixes_of_length_one(expr * re, std::set<zstring> &suffixes) {
+        std::set<zstring> found_suffixes;
+        if (regex_suffixes_of_length_one.find(re, found_suffixes)) {
+            for (auto p : found_suffixes) {
+                suffixes.insert(p);
+            }
+            return true;
+        } else {
+            if (get_regex_suffixes_of_length_one_uncached(re, found_suffixes)) {
+                regex_suffixes_of_length_one.insert(re, found_suffixes);
+                for (auto p : found_suffixes) {
+                    suffixes.insert(p);
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    // Returns true if the set could be computed exactly, or false otherwise.
+    bool theory_str::get_regex_prefixes_of_length_one_uncached(expr * re, std::set<zstring> &prefixes) {
+        ENSURE(u.is_re(re));
+        expr * sub1;
+        expr * sub2;
+        unsigned lo, hi;
+        if (u.re.is_to_re(re, sub1)) {
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
+            zstring str;
+            u.str.is_string(sub1, str);
+            if (str.length() > 0) {
+                prefixes.insert(str.extract(0, 1));
+            }
+            return true;
+        } else if (u.re.is_complement(re, sub1)) {
+            return false;
+        } else if (u.re.is_concat(re, sub1, sub2)) {
+            if (!get_regex_prefixes_of_length_one(sub1, prefixes)) {
+                return false;
+            }
+            // If the first subexpression could have been the empty string, take prefixes of the second subexpr as well.
+            if (regex_could_accept_empty_string(sub1)) {
+                return get_regex_prefixes_of_length_one(sub2, prefixes);
+            }
+            return true;
+        } else if (u.re.is_union(re, sub1, sub2)) {
+            return get_regex_prefixes_of_length_one(sub1, prefixes) && get_regex_prefixes_of_length_one(sub2, prefixes);
+        } else if (u.re.is_star(re, sub1) || u.re.is_plus(re, sub1)) {
+            return get_regex_prefixes_of_length_one(sub1, prefixes);
+        } else if (u.re.is_loop(re, sub1, lo, hi) || u.re.is_loop(re, sub1, lo)) {
+            return get_regex_prefixes_of_length_one(sub1, prefixes);
+        } else if (u.re.is_range(re, sub1, sub2)) {
+            SASSERT(u.str.is_string(sub1));
+            SASSERT(u.str.is_string(sub2));
+            zstring str1, str2;
+            u.str.is_string(sub1, str1);
+            u.str.is_string(sub2, str2);
+            if (str1.length() == 1 && str2.length() == 1) {
+                for (unsigned c = str1[0]; c <= str2[0]; ++c) {
+                    zstring z(c);
+                    prefixes.insert(z);
+                }
+                return true;
+            } else {
+                return false;
+            }
+        } else if (u.re.is_full_char(re) || u.re.is_full_seq(re)) {
+            for (unsigned c = 0; c <= 255; ++c) {
+                zstring z(c);
+                prefixes.insert(z);
+            }
+	        return true;
+        } else {
+            TRACE("str", tout << "WARNING: unknown regex term " << mk_pp(re, get_manager()) << std::endl;);
+            return false;
+        }
+    }
+
+    // Returns true if the set could be computed exactly, or false otherwise.
+    bool theory_str::get_regex_suffixes_of_length_one_uncached(expr * re, std::set<zstring> &suffixes) {
+        ENSURE(u.is_re(re));
+        expr * sub1;
+        expr * sub2;
+        unsigned lo, hi;
+        if (u.re.is_to_re(re, sub1)) {
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
+            zstring str;
+            u.str.is_string(sub1, str);
+            if (str.length() > 0) {
+                suffixes.insert(str.extract(str.length() - 1, str.length()));
+            }
+            return true;
+        } else if (u.re.is_complement(re, sub1)) {
+            return false;
+        } else if (u.re.is_concat(re, sub1, sub2)) {
+            if (!get_regex_suffixes_of_length_one(sub2, suffixes)) {
+                return false;
+            }
+            // If the second subexpression could have been the empty string, take suffixes of the first subexpr as well.
+            if (regex_could_accept_empty_string(sub2)) {
+                return get_regex_suffixes_of_length_one(sub1, suffixes);
+            }
+            return true;
+        } else if (u.re.is_union(re, sub1, sub2)) {
+            return get_regex_suffixes_of_length_one(sub1, suffixes) && get_regex_suffixes_of_length_one(sub2, suffixes);
+        } else if (u.re.is_star(re, sub1) || u.re.is_plus(re, sub1)) {
+            return get_regex_suffixes_of_length_one(sub1, suffixes);
+        } else if (u.re.is_loop(re, sub1, lo, hi) || u.re.is_loop(re, sub1, lo)) {
+            return get_regex_suffixes_of_length_one(sub1, suffixes);
+        } else if (u.re.is_range(re, sub1, sub2)) {
+            SASSERT(u.str.is_string(sub1));
+            SASSERT(u.str.is_string(sub2));
+            zstring str1, str2;
+            u.str.is_string(sub1, str1);
+            u.str.is_string(sub2, str2);
+            if (str1.length() == 1 && str2.length() == 1) {
+                for (unsigned c = str1[0]; c <= str2[0]; ++c) {
+                    zstring z(c);
+                    suffixes.insert(z);
+                }
+                return true;
+            } else {
+                return false;
+            }
+        } else if (u.re.is_full_char(re) || u.re.is_full_seq(re)) {
+            for (unsigned c = 0; c <= 255; ++c) {
+                zstring z(c);
+                suffixes.insert(z);
+            }
+	        return true;
+        } else {
+            TRACE("str", tout << "WARNING: unknown regex term " << mk_pp(re, get_manager()) << std::endl;);
+            return false;
+        }
+    }
+
+    bool theory_str::regex_could_accept_empty_string(expr * re) {
+        bool accepts_empty;
+        if (regex_could_accept_empty_string_cache.find(re, accepts_empty)) {
+            return accepts_empty;
+        } else {
+            accepts_empty = regex_could_accept_empty_string_uncached(re);
+            regex_could_accept_empty_string_cache.insert(re, accepts_empty);
+            return accepts_empty;
+        }
+    }
+
+    bool theory_str::regex_could_accept_empty_string_uncached(expr * re) {
+        ENSURE(u.is_re(re));
+        expr * sub1;
+        expr * sub2;
+        unsigned lo, hi;
+        if (u.re.is_to_re(re, sub1)) {
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
+            zstring str;
+            u.str.is_string(sub1, str);
+            return str.length() == 0;
+        } else if (u.re.is_complement(re, sub1)) {
+            return !regex_could_accept_empty_string(sub1);
+        } else if (u.re.is_concat(re, sub1, sub2)) {
+            if (regex_could_accept_empty_string(sub1)) {
+                return regex_could_accept_empty_string(sub2);
+            } else {
+                return false;
+            }
+        } else if (u.re.is_union(re, sub1, sub2)) {
+            return regex_could_accept_empty_string(sub1) || regex_could_accept_empty_string(sub2);
+        } else if (u.re.is_star(re, sub1)) {
+            return true;
+        } else if (u.re.is_plus(re, sub1)) {
+            return regex_could_accept_empty_string(sub1);
+        } else if (u.re.is_loop(re, sub1, lo, hi) || u.re.is_loop(re, sub1, lo)) {
+            if (lo == 0) {
+                return true;
+            } else {
+                return regex_could_accept_empty_string(sub1);
+            }
+        } else if (u.re.is_range(re, sub1, sub2)) {
+            return false;
+        } else if (u.re.is_full_char(re)) {
+            return false;
+        } else if (u.re.is_full_seq(re)) {
+            return true;
+        } else {
+            TRACE("str", tout << "WARNING: unknown regex term " << mk_pp(re, get_manager()) << std::endl;);
+            return false;
         }
     }
 
