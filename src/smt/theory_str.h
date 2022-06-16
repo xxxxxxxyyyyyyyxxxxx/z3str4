@@ -108,6 +108,55 @@ public:
     }
 };
 
+struct c_hash { unsigned operator()(char u) const { return (unsigned)u; } };
+struct c_eq { bool operator()(char u1, char u2) const { return u1 == u2; } };
+
+class nfa {
+protected:
+    bool m_valid;
+    unsigned m_next_id;
+
+    unsigned next_id() {
+        unsigned retval = m_next_id;
+        ++m_next_id;
+        return retval;
+    }
+
+    unsigned m_start_state;
+    unsigned m_end_state;
+
+    std::map<unsigned, std::map<char, unsigned> > transition_map;
+    std::map<unsigned, std::set<unsigned> > epsilon_map;
+
+    void make_transition(unsigned start, char symbol, unsigned end) {
+        transition_map[start][symbol] = end;
+    }
+
+    void make_epsilon_move(unsigned start, unsigned end) {
+        epsilon_map[start].insert(end);
+    }
+
+    // Convert a regular expression to an e-NFA using Thompson's construction
+    void convert_re(expr * e, unsigned & start, unsigned & end, seq_util & u);
+
+public:
+    nfa(seq_util & u, expr * e)
+: m_valid(true), m_next_id(0), m_start_state(0), m_end_state(0) {
+        convert_re(e, m_start_state, m_end_state, u);
+    }
+
+    nfa() : m_valid(false), m_next_id(0), m_start_state(0), m_end_state(0) {}
+
+    bool is_valid() const {
+        return m_valid;
+    }
+
+    void epsilon_closure(unsigned start, std::set<unsigned> & closure);
+
+    bool matches(zstring input);
+};
+
+
 class regex_automaton_under_assumptions {
 protected:
     expr * re_term;
@@ -444,10 +493,17 @@ protected:
     obj_hashtable<expr> regex_terms;
     obj_map<expr, ptr_vector<expr> > regex_terms_by_string; // S --> [ (str.in.re S *) ]
     obj_map<expr, svector<regex_automaton_under_assumptions> > regex_automaton_assumptions; // RegEx --> [ aut+assumptions ]
+
+    obj_map<expr, nfa> regex_nfa_cache; // Regex term --> NFA
+
     obj_hashtable<expr> regex_terms_with_path_constraints; // set of string terms which have had path constraints asserted in the current scope
     obj_hashtable<expr> regex_terms_with_length_constraints; // set of regex terms which had had length constraints asserted in the current scope
     obj_map<expr, expr*> regex_term_to_length_constraint; // (str.in.re S R) -> (length constraint over S wrt. R)
     obj_map<expr, ptr_vector<expr> > regex_term_to_extra_length_vars; // extra length vars used in regex_term_to_length_constraint entries
+
+    obj_map<expr, std::set<zstring> > regex_prefixes_of_length_one; // Regex term --> all prefixes of length 1
+    obj_map<expr, std::set<zstring> > regex_suffixes_of_length_one; // Regex term --> all suffixes of length 1
+    obj_map<expr, bool> regex_could_accept_empty_string_cache;
 
     // keep track of the last lower/upper bound we saw for each string term
     // so we don't perform duplicate work
@@ -581,7 +637,8 @@ protected:
     bool solve_regex_automata();
     unsigned estimate_regex_complexity(expr * re);
     unsigned estimate_regex_complexity_under_complement(expr * re);
-    unsigned estimate_automata_intersection_difficulty(eautomaton * aut1, eautomaton * aut2);
+    unsigned estimate_automata_intersection_difficulty(eautomaton * aut1, eautomaton * aut2, bool need_to_complement);
+    unsigned estimate_automata_complement_difficulty(eautomaton * aut);
     bool check_regex_length_linearity(expr * re);
     bool check_regex_length_linearity_helper(expr * re, bool already_star);
     expr_ref infer_all_regex_lengths(expr * lenVar, expr * re, expr_ref_vector & freeVariables);
@@ -594,6 +651,34 @@ protected:
     expr_ref aut_path_rewrite_constraint(expr * cond, expr * ch_var);
     void regex_inc_counter(obj_map<expr, unsigned> & counter_map, expr * key);
     unsigned regex_get_counter(obj_map<expr, unsigned> & counter_map, expr * key);
+
+    bool get_regex_prefixes_of_length_one(expr * re, std::set<zstring> &prefixes);
+    bool get_regex_prefixes_of_length_one_uncached(expr * re, std::set<zstring> &prefixes);
+    bool get_regex_suffixes_of_length_one(expr * re, std::set<zstring> &suffixes);
+    bool get_regex_suffixes_of_length_one_uncached(expr * re, std::set<zstring> &suffixes);
+    bool regex_could_accept_empty_string(expr * re);
+    bool regex_could_accept_empty_string_uncached(expr * re);
+    // @mku
+    void expr_to_expr_vector(expr * ex, expr_ref_vector & ex_v, std::set<expr*> & letter_alphabet, std::set<expr*> & variable_alphabet);
+    void expr_vector_to_expr(expr_ref_vector * ex_v, expr*& ex);
+    void split_letter_expression(zstring & strConst, expr_ref_vector & ex_v,std::set<expr*> & alphabet);
+    bool get_suffix(expr_ref_vector * ex_v, unsigned k, expr_ref_vector & suffix);
+    bool get_prefix(expr_ref_vector * ex_v, unsigned k, expr_ref_vector & prefix);
+    void modify_parikh_image(expr * ex, obj_map<expr,int> & p);
+    void get_parikh_image(expr_ref_vector * ex_v, obj_map<expr,int> & p_letters, obj_map<expr,int> & p_variables);
+    void get_substracted_parikh_image(expr_ref_vector * lhs, expr_ref_vector * rhs, std::set<expr*> * letter_alphabet, std::set<expr*> * variable_alphabet, obj_map<expr,int> & p_letters, obj_map<expr,int> & p_variables);
+    void calculate_substraced_parikh_image(obj_map<expr,int> * r_parikh,obj_map<expr,int> * l_parikh, std::set<expr*> * alphabet, obj_map<expr,int> & s_parikh);
+    void assert_parikh_axioms(expr * lhs, expr * rhs,expr_ref_vector * lhs_v, expr_ref_vector * rhs_v, std::set<expr*> * letter_alphabet, std::set<expr*> * variable_alphabet, std::function<bool(expr_ref_vector*,unsigned,expr_ref_vector&)> & process_fun);
+    bool parikh_letters_linup(obj_map<expr,int> * parikh);
+    bool parikh_Image_all_zero(obj_map<expr,int> * parikh);
+    bool parkih_one_sided_mismatch(obj_map<expr,int> * p_variable, obj_map<expr,int> * p_letter);
+    bool parikh_multiset_mismatch(obj_map<expr,int> * p_variable, obj_map<expr,int> * p_letter);
+    void remove_equal_pre_and_suffix(expr_ref_vector & lhs_v, expr_ref_vector & rhs_v);
+    void get_parikh_variable_constraint(obj_map<expr,int> * p_variables, expr *& ex);
+    void build_parkih_equation_system(obj_map<expr,int> * p_variables, obj_map<expr,int> * p_letters, expr_ref globalPremise);
+    void add_aX_constraint(expr_ref_vector & lhs, expr_ref_vector & rhs, expr_ref premise);
+    bool verify_and_add_aX_constraint(expr * varFirst, expr * varSecond, expr * letter, expr_ref & axiom);
+    void print_expr_vector(expr_ref_vector * ex_v);
 
     void set_up_axioms(expr * ex);
     void handle_equality(expr * lhs, expr * rhs);
@@ -681,14 +766,15 @@ protected:
     void check_consistency_contains(expr * e, bool is_true);
 
     int ctx_dep_analysis(std::map<expr*, int> & strVarMap, std::map<expr*, int> & freeVarMap,
-            std::map<expr*, std::map<expr*, int> > & var_eq_concat_map);
+            std::map<expr*, std::set<expr*> > & unrollGroupMap, std::map<expr*, std::map<expr*, int> > & var_eq_concat_map);
     void trace_ctx_dep(std::ofstream & tout,
             std::map<expr*, expr*> & aliasIndexMap,
             std::map<expr*, expr*> & var_eq_constStr_map,
             std::map<expr*, std::map<expr*, int> > & var_eq_concat_map,
             std::map<expr*, std::map<expr*, int> > & var_eq_unroll_map,
             std::map<expr*, expr*> & concat_eq_constStr_map,
-            std::map<expr*, std::map<expr*, int> > & concat_eq_concat_map);
+            std::map<expr*, std::map<expr*, int> > & concat_eq_concat_map,
+            std::map<expr*, std::set<expr*> > & unrollGroupMap);
 
     bool term_appears_as_subterm(expr * needle, expr * haystack);
     void classify_ast_by_type(expr * node, std::map<expr*, int> & varMap,
