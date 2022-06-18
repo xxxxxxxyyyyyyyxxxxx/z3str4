@@ -1,6 +1,6 @@
 ############################################
 # Copyright (c) 2012 Microsoft Corporation
-# 
+#
 # Z3 project configuration files
 #
 # Author: Leonardo de Moura (leonardo)
@@ -9,7 +9,7 @@ from mk_util import *
 
 def init_version():
     set_version(4, 8, 18, 0)
-    
+
 # Z3 Project definition
 def init_project_def():
     init_version()
@@ -26,8 +26,8 @@ def init_project_def():
     add_lib('euf', ['ast', 'util'], 'ast/euf')
     add_lib('params', ['util'])
     add_lib('smt_params', ['params'], 'smt/params')
-    add_lib('grobner', ['ast', 'dd', 'simplex'], 'math/grobner')    
-    add_lib('sat', ['util', 'dd', 'grobner'])    
+    add_lib('grobner', ['ast', 'dd', 'simplex'], 'math/grobner')
+    add_lib('sat', ['util', 'dd', 'grobner'])
     add_lib('nlsat', ['polynomial', 'sat'])
     add_lib('lp', ['util', 'nlsat', 'grobner', 'interval', 'smt_params'], 'math/lp')
     add_lib('rewriter', ['ast', 'polynomial', 'automata', 'params'], 'ast/rewriter')
@@ -65,7 +65,7 @@ def init_project_def():
     add_lib('sls_tactic', ['tactic', 'normal_forms', 'core_tactics', 'bv_tactics'], 'tactic/sls')
     add_lib('qe', ['smt', 'mbp', 'qe_lite', 'nlsat', 'tactic', 'nlsat_tactic'], 'qe')
     add_lib('sat_solver', ['solver', 'core_tactics', 'aig_tactic', 'bv_tactics', 'arith_tactics', 'sat_tactic'], 'sat/sat_solver')
-    add_lib('fd_solver', ['core_tactics', 'arith_tactics', 'sat_solver', 'smt'], 'tactic/fd_solver') 
+    add_lib('fd_solver', ['core_tactics', 'arith_tactics', 'sat_solver', 'smt'], 'tactic/fd_solver')
     add_lib('muz', ['smt', 'sat', 'smt2parser', 'aig_tactic', 'qe'], 'muz/base')
     add_lib('dataflow', ['muz'], 'muz/dataflow')
     add_lib('transforms', ['muz', 'hilbert', 'dataflow'], 'muz/transforms')
@@ -76,7 +76,8 @@ def init_project_def():
     add_lib('ddnf', ['muz', 'transforms', 'rel'], 'muz/ddnf')
     add_lib('bmc', ['muz', 'transforms', 'fd_solver'], 'muz/bmc')
     add_lib('fp',  ['muz', 'clp', 'tab', 'rel', 'bmc', 'ddnf', 'spacer'], 'muz/fp')
-    add_lib('smtlogic_tactics', ['ackermannization', 'sat_solver', 'arith_tactics', 'bv_tactics', 'nlsat_tactic', 'smt_tactic', 'aig_tactic', 'fp', 'muz', 'qe'], 'tactic/smtlogics')
+    add_lib('str_tactics', ['tactic'], 'tactic/str')
+    add_lib('smtlogic_tactics', ['ackermannization', 'sat_solver', 'arith_tactics', 'bv_tactics', 'nlsat_tactic', 'smt_tactic', 'aig_tactic', 'fp', 'muz', 'qe', 'str_tactics'], 'tactic/smtlogics')
     add_lib('ufbv_tactic', ['normal_forms', 'core_tactics', 'macros', 'smt_tactic', 'rewriter', 'smtlogic_tactics'], 'tactic/ufbv')
     add_lib('fpa_tactics', ['fpa', 'core_tactics', 'bv_tactics', 'sat_tactic', 'smt_tactic', 'arith_tactics', 'smtlogic_tactics'], 'tactic/fpa')
     add_lib('portfolio', ['smtlogic_tactics', 'sat_solver', 'ufbv_tactic', 'fpa_tactics', 'aig_tactic', 'fp',  'fd_solver', 'qe', 'sls_tactic', 'subpaving_tactic'], 'tactic/portfolio')
@@ -85,6 +86,7 @@ def init_project_def():
     add_lib('api', ['portfolio',  'realclosure', 'opt'],
             includes2install=['z3.h', 'z3_v1.h', 'z3_macros.h'] + API_files)
     add_lib('extra_cmds', ['cmd_context', 'subpaving_tactic', 'qe', 'arith_tactics'], 'cmd_context/extra_cmds')
+
     add_exe('shell', ['api', 'sat', 'extra_cmds', 'opt'], exe_name='z3')
     add_exe('test', ['api', 'fuzzing', 'simplex', 'sat_smt'], exe_name='test-z3', install=False)
     _libz3Component = add_dll('api_dll', ['api', 'sat', 'extra_cmds'], 'api/dll',
@@ -102,8 +104,8 @@ def init_project_def():
     add_python_install(_libz3Component)
     add_js()
     # Examples
-    add_cpp_example('cpp_example', 'c++') 
-    add_cpp_example('z3_tptp', 'tptp') 
+    add_cpp_example('cpp_example', 'c++')
+    add_cpp_example('z3_tptp', 'tptp')
     add_c_example('c_example', 'c')
     add_c_example('maxsat')
     add_dotnet_example('dotnet_example', 'dotnet')
@@ -111,5 +113,3 @@ def init_project_def():
     add_ml_example('ml_example', 'ml')
     add_z3py_example('py_example', 'python')
     return API_files
-
-

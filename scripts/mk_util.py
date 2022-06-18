@@ -499,7 +499,7 @@ def find_ml_lib():
 
 def is64():
     global LINUX_X64
-    if is_sunos() and sys.version_info.major < 3: 
+    if is_sunos() and sys.version_info.major < 3:
         return LINUX_X64
     else:
         return LINUX_X64 and sys.maxsize >= 2**32
@@ -625,11 +625,11 @@ elif os.name == 'posix':
         else:
             LINUX_X64=False
 
-            
+
 if os.name == 'posix' and os.uname()[4] == 'arm64':
     IS_ARCH_ARM64 = True
 
-            
+
 def display_help(exit_code):
     print("mk_make.py: Z3 Makefile generator\n")
     print("This script generates the Makefile for the Z3 theorem prover.")
@@ -792,7 +792,7 @@ def extract_c_includes(fname):
     linenum = 1
     for line in f:
         m1 = std_inc_pat.match(line)
-        if m1: 
+        if m1:
             root_file_name = m1.group(1)
             slash_pos =  root_file_name.rfind('/')
             if slash_pos >= 0  and root_file_name.find("..") < 0 : #it is a hack for lp include files that behave as continued from "src"
@@ -972,6 +972,8 @@ class Component:
     # That is, we were looking for fname when processing ownerfile
     def find_file(self, fname, ownerfile, orig_include=None):
         full_fname = os.path.join(self.src_dir, fname)
+        # print("1:")
+        # print(full_fname)
 
         # Store all our possible locations
         possibilities = set()
@@ -986,6 +988,8 @@ class Component:
         for dep in self.deps:
             c_dep = get_component(dep)
             full_fname = os.path.join(c_dep.src_dir, fname)
+            # print("2:")
+            # print(full_fname)
             if os.path.exists(full_fname):
                 possibilities.add(c_dep)
 
@@ -1650,7 +1654,7 @@ def set_key_file(self):
        else:
            print("Keyfile '%s' could not be found; %s.dll will be unsigned." % (self.key_file, self.dll_name))
            self.key_file = None
-    
+
 
 # build for dotnet core
 class DotNetDLLComponent(Component):
@@ -1664,7 +1668,7 @@ class DotNetDLLComponent(Component):
         self.assembly_info_dir = assembly_info_dir
         self.key_file = default_key_file
 
-    
+
     def mk_makefile(self, out):
         if not is_dotnet_core_enabled():
             return
@@ -1680,7 +1684,7 @@ class DotNetDLLComponent(Component):
             out.write(' ')
             out.write(cs_file)
         out.write('\n')
-        
+
         set_key_file(self)
         key = ""
         if not self.key_file is None:
@@ -1724,7 +1728,7 @@ class DotNetDLLComponent(Component):
             ous.write(core_csproj_str)
 
         dotnetCmdLine = [DOTNET, "build", csproj]
-        
+
         dotnetCmdLine.extend(['-c'])
         if DEBUG_MODE:
             dotnetCmdLine.extend(['Debug'])
@@ -1733,19 +1737,19 @@ class DotNetDLLComponent(Component):
 
         path = os.path.join(os.path.abspath(BUILD_DIR), ".")
         dotnetCmdLine.extend(['-o', "\"%s\"" % path])
-            
+
         MakeRuleCmd.write_cmd(out, ' '.join(dotnetCmdLine))
-        out.write('\n')        
+        out.write('\n')
         out.write('%s: %s\n\n' % (self.name, dllfile))
 
     def main_component(self):
         return is_dotnet_core_enabled()
-    
+
     def has_assembly_info(self):
         # TBD: is this required for dotnet core given that version numbers are in z3.csproj file?
         return False
 
-    
+
     def mk_win_dist(self, build_path, dist_path):
         if is_dotnet_core_enabled():
             mk_dir(os.path.join(dist_path, INSTALL_BIN_DIR))
@@ -2038,7 +2042,7 @@ class MLComponent(Component):
             out.write('ml: %s.cma %s.cmxa %s.cmxs\n' % (z3mls, z3mls, z3mls))
             if IS_OSX:
                 out.write('\tinstall_name_tool -id %s/libz3.dylib libz3.dylib\n' % (stubs_install_path))
-                out.write('\tinstall_name_tool -change libz3.dylib %s/libz3.dylib api/ml/dllz3ml.so\n' % (stubs_install_path))                
+                out.write('\tinstall_name_tool -change libz3.dylib %s/libz3.dylib api/ml/dllz3ml.so\n' % (stubs_install_path))
             out.write('\n')
 
             if IS_WINDOWS:
@@ -3117,7 +3121,7 @@ def get_platform_toolset_str():
     if len(tokens) < 2:
         return default
     else:
-        if tokens[0] == "15": 
+        if tokens[0] == "15":
             # Visual Studio 2017 reports 15.* but the PlatformToolsetVersion is 141
             return "v141"
         else:
