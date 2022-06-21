@@ -340,9 +340,9 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
     } else if (m_smt_params.m_StrTactic == symbol("3probe")) {
         // don't apply ext_str_tactic before the regex probe, as it may introduce regexes
 
-        seq_p.set_uint("seq.giveup_point", 7);
+        // seq_p.set_uint("seq.giveup_point", 7);
         tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
-        seq_p.set_uint("seq.giveup_point", 0);
+        // ßseq_p.set_uint("seq.giveup_point", 0);
         tactic * z3seqAfter = using_params(mk_smt_tactic(m), seq_p);
 
         tactic * innertree =
