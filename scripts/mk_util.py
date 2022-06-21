@@ -972,8 +972,6 @@ class Component:
     # That is, we were looking for fname when processing ownerfile
     def find_file(self, fname, ownerfile, orig_include=None):
         full_fname = os.path.join(self.src_dir, fname)
-        # print("1:")
-        # print(full_fname)
 
         # Store all our possible locations
         possibilities = set()
@@ -988,8 +986,6 @@ class Component:
         for dep in self.deps:
             c_dep = get_component(dep)
             full_fname = os.path.join(c_dep.src_dir, fname)
-            # print("2:")
-            # print(full_fname)
             if os.path.exists(full_fname):
                 possibilities.add(c_dep)
 
