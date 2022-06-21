@@ -115,7 +115,7 @@ set(Z3_COMPONENT_CXX_DEFINES "")
 set(Z3_COMPONENT_CXX_FLAGS "")
 set(Z3_COMPONENT_EXTRA_INCLUDE_DIRS "")
 set(Z3_DEPENDENT_LIBS "")
-set(Z3_DEPENDENT_EXTRA_CXX_LINK_FLAGS "")
+set(Z3_DEPENDENT_EXTRA_CXX_LINK_FLAGS "-static")
 
 ################################################################################
 # Build type
@@ -345,7 +345,7 @@ endif()
 ################################################################################
 # Option to control what type of library we build
 ################################################################################
-option(Z3_BUILD_LIBZ3_SHARED "Build libz3 as a shared library if true, otherwise build a static library" OFF)
+option(Z3_BUILD_LIBZ3_SHARED "Build libz3 as a shared library if true, otherwise build a static library" ON)
 
 
 ################################################################################
