@@ -364,6 +364,20 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
 
         return st;
+    } else if (m_smt_params.m_StrTactic == symbol("seqfirst")) {
+
+
+        // std::cout << "seqfirst" << std::endl;
+        // std::cout << "millisecond time: " << m_smt_params.m_PreMilliseconds << std::endl;
+        tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
+
+        tactic * tree = or_else(z3seqBefore, z3str3_2);
+
+        tree = and_then(mk_ext_str_tactic(m, p), tree);
+
+        tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
+
+        return st;
     } else {
         // unknown tactic
         NOT_IMPLEMENTED_YET();
