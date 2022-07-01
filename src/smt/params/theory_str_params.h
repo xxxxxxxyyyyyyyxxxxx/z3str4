@@ -109,6 +109,10 @@ struct theory_str_params {
      * PreMilliseconds is the number of milliseconds to try the sequence solver on disjunctive fragment queries.
      */
     unsigned m_PreMilliseconds = 1000;
+
+
+    unsigned m_MidMilliseconds = 1000;
+
     /*
     * If MultisetCheck is true, we use the quick multiset check to
     * help solve word equations.

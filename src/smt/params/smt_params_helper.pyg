@@ -126,6 +126,7 @@ def_module_params(module_name='smt',
                           ('str.fixed_length_refinement', BOOL, False, 'use abstraction refinement in fixed-length equation solver (Z3str3 only)'),
 
                           ('str.pre_milliseconds', UINT, 1000, 'number milliseconds to try sequence solver for disjunctive queries (Z3str3 only)'),
+                          ('str.mid_milliseconds', UINT, 1000, 'smt-2022 parameter'),
                           ('str.rewriter_tactic', BOOL, True, 'use global formula rewriter tactic for string fragment (Z3str3 only)'),
                           ('str.multiset_check', BOOL, True, 'use the quick multiset check for word equations (Z3str3 only)'),
                           ('str.tactic', STRING, 'z3str4', '(all) is static selection of all arms; (arr) is the arrangement-based solver; (las) is the length-abstraction-based solver; (z3str4) is the defualt and includes dynamic difficulty estimation, (ml) uses machine learning to perform arm selection'),
