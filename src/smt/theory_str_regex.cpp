@@ -894,7 +894,11 @@ namespace smt {
             return _qadd(lo, cx);
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -937,7 +941,11 @@ namespace smt {
             return _qmul(2, cx);
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1057,7 +1065,11 @@ namespace smt {
             lens.reset();
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1189,7 +1201,11 @@ namespace smt {
             return retval;
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1783,7 +1799,11 @@ namespace smt {
             return get_regex_prefixes_of_length_one(sub1, prefixes);
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1842,7 +1862,11 @@ namespace smt {
             return get_regex_suffixes_of_length_one(sub1, suffixes);
         } else if (u.re.is_range(re, sub1, sub2)) {
             SASSERT(u.str.is_string(sub1));
+            if (!u.str.is_string(sub1))
+                throw default_exception("regular expressions must be built from string literals");
             SASSERT(u.str.is_string(sub2));
+            if (!u.str.is_string(sub2))
+                throw default_exception("regular expressions must be built from string literals");
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
