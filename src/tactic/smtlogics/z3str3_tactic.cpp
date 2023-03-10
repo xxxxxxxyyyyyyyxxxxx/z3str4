@@ -256,8 +256,8 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
     general_p.set_bool("str.search_overlaps", false);
 
     params_ref seq_p = p;
-    seq_p.set_sym("string_solver", symbol("seq"));
-    seq_p.set_bool("tactic_model_validation", true);
+    seq_p.set_sym("string_solver", symbol("seq")); 
+    seq_p.set_bool("tactic_model_validation", true); // check what is it
 
     params_ref search_overlaps_p = p;
     search_overlaps_p.set_bool("str.fixed_length_preprocessing", false);
@@ -342,7 +342,7 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
 
         // seq_p.set_uint("seq.giveup_point", 7);
         tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
-        // ßseq_p.set_uint("seq.giveup_point", 0);
+        // seq_p.set_uint("seq.giveup_point", 0);
         tactic * z3seqAfter = using_params(mk_smt_tactic(m), seq_p);
 
         tactic * innertree =
@@ -397,6 +397,12 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
 
         return st;
+    } else if (m_smt_params.m_StrTactic == symbol("seqhack")) {
+
+        z3seq = using_params(mk_smt_tactic(m), seq_p);
+
+        return using_params(and_then(mk_rewriter_tactic(m, p), z3seq), p);
+        
     } else {
         // unknown tactic
         NOT_IMPLEMENTED_YET();
