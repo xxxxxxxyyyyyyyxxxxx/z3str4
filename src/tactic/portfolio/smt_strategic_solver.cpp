@@ -46,6 +46,7 @@ Notes:
 #include "solver/solver2tactic.h"
 #include "solver/parallel_tactical.h"
 #include "solver/parallel_params.hpp"
+#include "smt/params/smt_params.h"
 #include "params/tactic_params.hpp"
 #include "parsers/smt2/smt2parser.h"
 #include "sat/sat_params.hpp"
@@ -137,13 +138,8 @@ static solver* mk_solver_for_logic(ast_manager & m, params_ref const & p, symbol
         s = mk_inc_sat_solver(m, p);
     if (!s && tp.default_tactic() == "sat")
         s = mk_inc_sat_solver(m, p);
-<<<<<<< HEAD
-    if (!s)
-        s = mk_smt_solver(m, p, logic);
-=======
     if (!s)
         s = mk_smt2_solver(m, p, logic);
->>>>>>> z3-4.12.2
     return s;
 }
 
@@ -152,10 +148,6 @@ class smt_strategic_solver_factory : public solver_factory {
 public:
     smt_strategic_solver_factory(symbol const & logic):m_logic(logic) {}
 
-<<<<<<< HEAD
-    ~smt_strategic_solver_factory() override {}
-=======
->>>>>>> z3-4.12.2
     solver * operator()(ast_manager & m, params_ref const & p, bool proofs_enabled, bool models_enabled, bool unsat_core_enabled, symbol const & logic) override {
         symbol l;
         if (m_logic != symbol::null)

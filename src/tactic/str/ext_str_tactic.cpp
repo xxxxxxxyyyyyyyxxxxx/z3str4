@@ -1,6 +1,6 @@
 #include "tactic/tactical.h"
 #include "tactic/str/ext_str_tactic.h"
-#include "tactic/generic_model_converter.h"
+// #include "tactic/generic_model_converter.h"
 #include "ast/ast_pp.h"
 #include "ast/rewriter/expr_replacer.h"
 #include "ast/rewriter/var_subst.h"
@@ -10,7 +10,7 @@
 
 class ext_str_tactic : public tactic {
     struct imp {
-        typedef generic_model_converter mc;
+        // typedef generic_model_converter mc;
 
         ast_manager& m;
         seq_util u;
@@ -23,7 +23,7 @@ class ext_str_tactic : public tactic {
         //std::map<expr* , expr*> regex_agg;
         //~ std::map<expr* , expr*> neg_regex_agg;
 
-        ref<mc> m_mc;
+        // ref<mc> m_mc;
         bool m_produce_models;
 
         const rational str_to_int_finitization_upper_bound = rational(50);
@@ -902,12 +902,13 @@ class ext_str_tactic : public tactic {
             SASSERT(g->is_well_formed());
             tactic_report report("ext_str", *g);
             fail_if_proof_generation("ext_str", g);
-            m_produce_models = g->models_enabled();
-            if (m_produce_models) {
-                m_mc = alloc(generic_model_converter, m, "ext_str");
-            } else {
-                m_mc = nullptr;
-            }
+            SASSERT(g->is_well_formed());
+            // m_produce_models = g->models_enabled();
+            // if (m_produce_models) {
+            //     m_mc = alloc(generic_model_converter, m, "ext_str");
+            // } else {
+            //     m_mc = nullptr;
+            // }
 
             SASSERT(g->is_well_formed());
 
@@ -1048,8 +1049,8 @@ class ext_str_tactic : public tactic {
             g->inc_depth();
             result.push_back(g.get());
             SASSERT(g->is_well_formed());
-            TRACE("ext_str_tactic", tout << "AFTER: " << std::endl; g->display(tout);
-            if (g->mc()) g->mc()->display(tout); tout << std::endl;);
+            TRACE("ext_str_tactic", tout << "AFTER: " << std::endl; g->display(tout););
+            // if (g->mc()) g->mc()->display(tout); tout << std::endl;);
         }
     };
 

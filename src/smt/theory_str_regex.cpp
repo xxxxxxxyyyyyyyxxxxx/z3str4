@@ -935,16 +935,7 @@ namespace smt {
             unsigned cx = estimate_regex_complexity_under_complement(sub1);
             return _qmul(2, cx);
         } else if (u.re.is_range(re, sub1, sub2)) {
-<<<<<<< HEAD
-            SASSERT(u.str.is_string(sub1));
-            if (!u.str.is_string(sub1))
-                throw default_exception("regular expressions must be built from string literals");
-            SASSERT(u.str.is_string(sub2));
-            if (!u.str.is_string(sub2))
-                throw default_exception("regular expressions must be built from string literals");
-=======
             if (!u.re.is_range(re, lo, hi)) throw default_exception("regular expressions must be built from string literals");
->>>>>>> z3-4.12.2
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1063,16 +1054,7 @@ namespace smt {
             // this is bad -- term generation requires this not to appear
             lens.reset();
         } else if (u.re.is_range(re, sub1, sub2)) {
-<<<<<<< HEAD
-            SASSERT(u.str.is_string(sub1));
-            if (!u.str.is_string(sub1))
-                throw default_exception("regular expressions must be built from string literals");
-            SASSERT(u.str.is_string(sub2));
-            if (!u.str.is_string(sub2))
-                throw default_exception("regular expressions must be built from string literals");
-=======
             if (!u.re.is_range(re, lo, hi)) throw default_exception("regular expressions must be built from string literals");
->>>>>>> z3-4.12.2
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
@@ -1203,16 +1185,7 @@ namespace smt {
             SASSERT(retval);
             return retval;
         } else if (u.re.is_range(re, sub1, sub2)) {
-<<<<<<< HEAD
-            SASSERT(u.str.is_string(sub1));
-            if (!u.str.is_string(sub1))
-                throw default_exception("regular expressions must be built from string literals");
-            SASSERT(u.str.is_string(sub2));
-            if (!u.str.is_string(sub2))
-                throw default_exception("regular expressions must be built from string literals");
-=======
             if (!u.re.is_range(re, lo, hi)) throw default_exception("regular expressions must be built from string literals");
->>>>>>> z3-4.12.2
             zstring str1, str2;
             u.str.is_string(sub1, str1);
             u.str.is_string(sub2, str2);
