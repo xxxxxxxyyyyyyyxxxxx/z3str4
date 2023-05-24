@@ -29,6 +29,7 @@ Notes:
 #include "ast/fpa_decl_plugin.h"
 #include "tactic/tactical.h"
 #include "util/stats.h"
+#include <iostream>
 
 #include "tactic/core/collect_statistics_tactic.h"
 
@@ -51,8 +52,6 @@ public:
         m_params(p) {
     }
 
-    ~collect_statistics_tactic() override {}
-
     char const* name() const override { return "collect_statistics"; }
 
     tactic * translate(ast_manager & m_) override {
@@ -74,10 +73,10 @@ public:
         for (unsigned i = 0; i < sz; i++)
             for_each_expr(cp, visited, g->form(i));
 
-        std::cout << "(" << std::endl;
+        std::cout << "(\n";
         for (auto const& kv : m_stats) 
-            std::cout << " :" << kv.first << "    " << kv.second << std::endl;
-        std::cout << ")" << std::endl;
+            std::cout << " :" << kv.first << "    " << kv.second << '\n';
+        std::cout << ")\n";
 
         g->inc_depth();
         result.push_back(g.get());

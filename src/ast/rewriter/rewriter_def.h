@@ -16,6 +16,8 @@ Author:
 Notes:
 
 --*/
+#pragma once
+
 #include "ast/rewriter/rewriter.h"
 #include "ast/ast_smt2_pp.h"
 #include "ast/ast_ll_pp.h"
@@ -636,10 +638,6 @@ rewriter_tpl<Config>::rewriter_tpl(ast_manager & m, bool proof_gen, Config & cfg
     m_r(m),
     m_pr(m),
     m_pr2(m) {
-}
-
-template<typename Config>
-rewriter_tpl<Config>::~rewriter_tpl() {
 }
 
 template<typename Config>

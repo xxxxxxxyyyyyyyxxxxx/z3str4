@@ -80,36 +80,23 @@ namespace sat {
 
     class i_local_search {
     public:
-        virtual ~i_local_search() {}
+        virtual ~i_local_search() = default;
         virtual void add(solver const& s) = 0;
         virtual void updt_params(params_ref const& p) = 0;
         virtual void set_seed(unsigned s) = 0;
         virtual lbool check(unsigned sz, literal const* assumptions, parallel* par) = 0;
-        virtual void reinit(solver& s) = 0;        
+        virtual void reinit(solver& s, bool_vector const& phase) = 0;        
         virtual unsigned num_non_binary_clauses() const = 0;
         virtual reslimit& rlimit() = 0;
         virtual model const& get_model() const = 0;
         virtual void collect_statistics(statistics& st) const = 0;        
-        virtual double get_priority(bool_var v) const { return 0; }
-
+        virtual double get_priority(bool_var v) const = 0;
+        virtual bool get_value(bool_var v) const { return true; }
     };
 
-    enum class hint_type {
-        null_h,
-        farkas_h,
-        bound_h,
-        implied_eq_h,    
-    };
-
-    struct proof_hint {
-        hint_type                              m_ty = hint_type::null_h;
-        vector<std::pair<rational, literal>>   m_literals;
-        vector<std::pair<unsigned, unsigned>>  m_eqs;
-        vector<std::pair<unsigned, unsigned>>  m_diseqs;
-        void reset() { m_ty = hint_type::null_h; m_literals.reset(); m_eqs.reset(); m_diseqs.reset(); }
-        std::string to_string() const;
-        void from_string(char const* s);
-        void from_string(std::string const& s) { from_string(s.c_str()); }
+    class proof_hint {
+    public:
+        virtual ~proof_hint() {}
     };
 
     class status {
@@ -148,6 +135,40 @@ namespace sat {
 
     std::ostream& operator<<(std::ostream& out, sat::status const& st);
     std::ostream& operator<<(std::ostream& out, sat::status_pp const& p);
+
+    /**
+     * Special cases of kissat style general backoff calculation.
+     * The version here calculates
+     * limit := value*log(C)^2*n*log(n)
+     * (effort calculation in kissat is based on ticks not clauses)
+     *
+     * respectively
+     * limit := conflicts + value*log(C)^2*n*log(n)
+     */
+    struct backoff {
+        unsigned base = 1;
+        unsigned lo = 0;
+        unsigned hi = UINT_MAX;
+        unsigned limit = 0;
+        unsigned count = 0;
+
+        bool should_apply(unsigned n) const { 
+            return limit <= n && lo <= n && n <= hi;
+        }
+
+        void inc(unsigned num_clauses) {
+            count++;
+            unsigned d = base * count * log2(count + 1);
+            unsigned cl = log2(num_clauses + 2);
+            limit = cl * cl * d;
+        }
+
+        void inc(unsigned num_conflicts, unsigned num_clauses) {
+            inc(num_clauses);
+            limit += num_conflicts;
+        }
+
+    };
 
 };
 

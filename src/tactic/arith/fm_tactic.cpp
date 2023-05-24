@@ -61,7 +61,8 @@ class fm_tactic : public tactic {
             return m.is_false(val);
         }
 
-        r_kind process(func_decl * x, expr * cls, arith_util & u, model& ev, rational & r) {
+        r_kind process(func_decl * x, expr * cls, arith_util & u, model& ev, rational & r, expr_ref& r_e) {
+            r_e = nullptr;
             unsigned num_lits;
             expr * const * lits;
             if (m.is_or(cls)) {
@@ -93,6 +94,7 @@ class fm_tactic : public tactic {
                     expr * lhs = to_app(l)->get_arg(0);
                     expr * rhs = to_app(l)->get_arg(1);
                     rational c;
+                    expr_ref c_e(m);
                     if (!u.is_numeral(rhs, c))
                         return NONE;
                     if (neg)
@@ -133,27 +135,41 @@ class fm_tactic : public tactic {
                             expr_ref val(m);
                             val = ev(monomial);
                             rational tmp;
-                            if (!u.is_numeral(val, tmp))
-                                return NONE;
-                            if (neg)
-                                tmp.neg();
-                            c -= tmp;
+                            if (u.is_numeral(val, tmp)) {
+                                if (neg)
+                                    tmp.neg();
+                                c -= tmp;
+                            }
+                            else {
+                                // this happens for algebraic numerals
+                                if (neg)
+                                    val = u.mk_uminus(val);
+                                if (!c_e)
+                                    c_e = u.mk_uminus(val);
+                                else
+                                    c_e = u.mk_sub(c_e, val);
+                            }
                         }
                     }
                     if (u.is_int(x->get_range()) && strict) {
                         // a*x < c --> a*x <= c-1
                         SASSERT(c.is_int());
                         c--;
+                        SASSERT(!c_e);
                     }
                     is_lower = a_val.is_neg();
                     c /= a_val;
+                    if (c_e)
+                        c_e = u.mk_div(c_e, u.mk_numeral(a_val, false));
                     if (u.is_int(x->get_range())) {
+                        SASSERT(!c_e);
                         if (is_lower)
                             c = ceil(c);
                         else
                             c = floor(c);
                     }
                     r = c;
+                    r_e = c_e;
                 }
             }
             (void)found;
@@ -187,6 +203,12 @@ class fm_tactic : public tactic {
             //model_evaluator ev(*(md.get()));
             //ev.set_model_completion(true);
             arith_util u(m);
+            auto mk_max = [&](expr* a, expr* b) {
+                return expr_ref(m.mk_ite(u.mk_ge(a, b), a, b), m);
+            };
+            auto mk_min = [&](expr* a, expr* b) {
+                return expr_ref(m.mk_ite(u.mk_ge(a, b), b, a), m);
+            };
             unsigned i = m_xs.size();
             while (i > 0) {
                 --i;
@@ -194,44 +216,67 @@ class fm_tactic : public tactic {
                 rational lower;
                 rational upper;
                 rational val;
-                bool has_lower = false;
-                bool has_upper = false;
+                expr_ref val_e(m), val_upper_e(m), val_lower_e(m);
+                bool has_lower = false, has_upper = false;
                 TRACE("fm_mc", tout << "processing " << x->get_name() << "\n";);
-                clauses::iterator it  = m_clauses[i].begin();
-                clauses::iterator end = m_clauses[i].end();
-                for (; it != end; ++it) {
+                for (expr* cl : m_clauses[i]) {
                     if (!m.inc()) 
                         throw tactic_exception(m.limit().get_cancel_msg());
-                    switch (process(x, *it, u, *md, val)) {
+                    switch (process(x, cl, u, *md, val, val_e)) {
                     case NONE: 
-                        TRACE("fm_mc", tout << "no bound for:\n" << mk_ismt2_pp(*it, m) << "\n";);
+                        TRACE("fm_mc", tout << "no bound for:\n" << mk_ismt2_pp(cl, m) << "\n";);
                         break;
                     case LOWER: 
-                        TRACE("fm_mc", tout << "lower bound: " << val << " for:\n" << mk_ismt2_pp(*it, m) << "\n";);
-                        if (!has_lower || val > lower) 
-                            lower = val; 
-                        has_lower = true;
+                        TRACE("fm_mc", tout << "lower bound: " << val << " for:\n" << mk_ismt2_pp(cl, m) << "\n";);
+                        if (val_e)
+                            val_lower_e = val_lower_e != nullptr ? mk_max(val_lower_e, val_e) : val_e;
+                        else if (!has_lower || val > lower) 
+                            lower = val, has_lower = true;
                         break;
                     case UPPER: 
-                        TRACE("fm_mc", tout << "upper bound: " << val << " for:\n" << mk_ismt2_pp(*it, m) << "\n";);
-                        if (!has_upper || val < upper) 
-                            upper = val; 
-                        has_upper = true;
+                        TRACE("fm_mc", tout << "upper bound: " << val << " for:\n" << mk_ismt2_pp(cl, m) << "\n";);
+                        if (val_e)
+                            val_upper_e = val_upper_e != nullptr ? mk_min(val_upper_e, val_e) : val_e;
+                        else if (!has_upper || val < upper) 
+                            upper = val, has_upper = true; 
                         break;
                     }
                 }
 
                 expr * x_val;
+                
                 if (u.is_int(x->get_range())) {
-                    if (has_lower)
+                    if (val_lower_e) {
+                        x_val = val_lower_e;
+                        if (has_lower)
+                            x_val = mk_max(x_val, u.mk_numeral(lower, true));
+                    }
+                    else if (val_upper_e) {
+                        x_val = val_upper_e;
+                        if (has_upper)
+                            x_val = mk_min(x_val, u.mk_numeral(upper, true));
+                    }
+                    else if (has_lower)
                         x_val = u.mk_numeral(lower, true);
                     else if (has_upper)
                         x_val = u.mk_numeral(upper, true);
                     else
                         x_val = u.mk_numeral(rational(0), true);
+                    
                 }
                 else {
-                    if (has_lower && has_upper)
+                    if (val_lower_e && has_lower)
+                        val_lower_e = mk_max(val_lower_e, u.mk_numeral(lower, false));
+                    if (val_upper_e && has_upper)
+                        val_upper_e = mk_min(val_upper_e, u.mk_numeral(upper, false));
+                    
+                    if (val_lower_e && val_upper_e)
+                        x_val = u.mk_div(u.mk_add(val_lower_e, val_upper_e), u.mk_real(2));
+                    else if (val_lower_e)
+                        x_val = u.mk_add(val_lower_e, u.mk_real(1));
+                    else if (val_upper_e)
+                        x_val = u.mk_sub(val_upper_e, u.mk_real(1));
+                    else if (has_lower && has_upper)
                         x_val = u.mk_numeral((upper + lower)/rational(2), false);
                     else if (has_lower)
                         x_val = u.mk_numeral(lower + rational(1), false);
@@ -422,10 +467,8 @@ class fm_tactic : public tactic {
                 x = t;
                 return true;
             }
-            else if (m_util.is_to_real(t) && is_uninterp_const(to_app(t)->get_arg(0))) {
-                x = to_app(t)->get_arg(0);
-                return true;
-            }
+            else if (m_util.is_to_real(t, x) && is_uninterp_const(x)) 
+                return true;            
             return false;
         }
         
@@ -1168,18 +1211,12 @@ class fm_tactic : public tactic {
             }
             // x_cost_lt is not a total order on variables
             std::stable_sort(x_cost_vector.begin(), x_cost_vector.end(), x_cost_lt(m_is_int));
-            TRACE("fm", 
-                  svector<x_cost>::iterator it2  = x_cost_vector.begin();
-                  svector<x_cost>::iterator end2 = x_cost_vector.end();
-                  for (; it2 != end2; ++it2) {
-                      tout << "(" << mk_ismt2_pp(m_var2expr.get(it2->first), m) << " " << it2->second << ") ";
-                  }
+            TRACE("fm",
+                  for (auto const& [v,c] : x_cost_vector) 
+                      tout << "(" << mk_ismt2_pp(m_var2expr.get(v), m) << " " << c << ") ";
                   tout << "\n";);
-            svector<x_cost>::iterator it2  = x_cost_vector.begin();
-            svector<x_cost>::iterator end2 = x_cost_vector.end();
-            for (; it2 != end2; ++it2) {
-                xs.push_back(it2->first);
-            }
+            for (auto const& [v, c] : x_cost_vector) 
+                xs.push_back(v);
         }
         
         void cleanup_constraints(constraints & cs) {
@@ -1215,11 +1252,9 @@ class fm_tactic : public tactic {
         void analyze(constraints const & cs, var x, bool & all_int, bool & unit_coeff) const {
             all_int    = true;
             unit_coeff = true;
-            constraints::const_iterator it  = cs.begin();
-            constraints::const_iterator end = cs.end();
-            for (; it != end; ++it) {
+            for (auto const * c : cs) {
                 bool curr_unit_coeff;
-                analyze(*(*it), x, all_int, curr_unit_coeff);
+                analyze(*c, x, all_int, curr_unit_coeff);
                 if (!all_int)
                     return;
                 if (!curr_unit_coeff)
@@ -1243,12 +1278,8 @@ class fm_tactic : public tactic {
         }
         
         void copy_constraints(constraints const & s, clauses & t) {
-            constraints::const_iterator it  = s.begin();
-            constraints::const_iterator end = s.end();
-            for (; it != end; ++it) {
-                app * c = to_expr(*(*it));
-                t.push_back(c);
-            }
+            for (auto const* cp : s)
+                t.push_back(to_expr(*cp));            
         }
         
         clauses tmp_clauses;
@@ -1262,10 +1293,8 @@ class fm_tactic : public tactic {
         }
         
         void mark_constraints_dead(constraints const & cs) {
-            constraints::const_iterator it  = cs.begin();
-            constraints::const_iterator end = cs.end();
-            for (; it != end; ++it)
-                (*it)->m_dead = true;
+            for (auto* cp : cs)
+                cp->m_dead = true;
         }
         
         void mark_constraints_dead(var x) {
@@ -1514,14 +1543,8 @@ class fm_tactic : public tactic {
         }
         
         void copy_remaining(vector<constraints> & v2cs) {
-            vector<constraints>::iterator it  = v2cs.begin();
-            vector<constraints>::iterator end = v2cs.end();
-            for (; it != end; ++it) {
-                constraints & cs = *it;
-                constraints::iterator it2  = cs.begin();
-                constraints::iterator end2 = cs.end();
-                for (; it2 != end2; ++it2) {
-                    constraint * c = *it2;
+            for (constraints& cs : v2cs) {
+                for (constraint* c : cs) {
                     if (!c->m_dead) {
                         c->m_dead = true;
                         expr * new_f = to_expr(*c);
@@ -1604,11 +1627,9 @@ class fm_tactic : public tactic {
         }
         
         void display_constraints(std::ostream & out, constraints const & cs) const {
-            constraints::const_iterator it  = cs.begin();
-            constraints::const_iterator end = cs.end();
-            for (; it != end; ++it) {
+            for (auto const* cp : cs) {
                 out << "  ";
-                display(out, *(*it));
+                display(out, *cp);
                 out << "\n";
             }
         }
@@ -1652,12 +1673,12 @@ public:
     void collect_param_descrs(param_descrs & r) override {
         insert_produce_models(r);
         insert_max_memory(r);
-        r.insert("fm_real_only", CPK_BOOL, "(default: true) consider only real variables for fourier-motzkin elimination.");
-        r.insert("fm_occ", CPK_BOOL, "(default: false) consider inequalities occurring in clauses for FM.");
-        r.insert("fm_limit", CPK_UINT, "(default: 5000000) maximum number of constraints, monomials, clauses visited during FM.");
-        r.insert("fm_cutoff1", CPK_UINT, "(default: 8) first cutoff for FM based on maximum number of lower/upper occurrences.");
-        r.insert("fm_cutoff2", CPK_UINT, "(default: 256) second cutoff for FM based on num_lower * num_upper occurrences.");
-        r.insert("fm_extra", CPK_UINT, "(default: 0) max. increase on the number of inequalities for each FM variable elimination step.");
+        r.insert("fm_real_only", CPK_BOOL, "consider only real variables for fourier-motzkin elimination.", "true");
+        r.insert("fm_occ",       CPK_BOOL, "consider inequalities occurring in clauses for FM.", "false");
+        r.insert("fm_limit",    CPK_UINT, "maximum number of constraints, monomials, clauses visited during FM.", "5000000");
+        r.insert("fm_cutoff1",  CPK_UINT, "first cutoff for FM based on maximum number of lower/upper occurrences.", "8");
+        r.insert("fm_cutoff2",  CPK_UINT, "second cutoff for FM based on num_lower * num_upper occurrences.", "256");
+        r.insert("fm_extra",    CPK_UINT, "max. increase on the number of inequalities for each FM variable elimination step.", "0");
     }
 
 

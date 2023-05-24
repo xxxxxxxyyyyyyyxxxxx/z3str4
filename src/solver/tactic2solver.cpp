@@ -70,7 +70,7 @@ public:
     void collect_statistics(statistics & st) const override;
     void get_unsat_core(expr_ref_vector & r) override;
     void get_model_core(model_ref & m) override;
-    proof * get_proof() override;
+    proof * get_proof_core() override;
     std::string reason_unknown() const override;
     void set_reason_unknown(char const* msg) override;
     void get_labels(svector<symbol> & r) override {}
@@ -83,6 +83,10 @@ public:
     phase* get_phase() override { return nullptr; }
     void set_phase(phase* p) override { }
     void move_to_front(expr* e) override { }
+
+    void register_on_clause(void* ctx, user_propagator::on_clause_eh_t& on_clause) override {
+        m_tactic->register_on_clause(ctx, on_clause);
+    }
 
     void user_propagate_init(
         void* ctx,
@@ -116,8 +120,8 @@ public:
         m_tactic->user_propagate_register_created(created_eh);
     }
 
-    void user_propagate_register_decide(user_propagator::decide_eh_t& created_eh) override {
-        m_tactic->user_propagate_register_decide(created_eh);
+    void user_propagate_register_decide(user_propagator::decide_eh_t& decide_eh) override {
+        m_tactic->user_propagate_register_decide(decide_eh);
     }
 
     void user_propagate_clear() override {
@@ -131,6 +135,9 @@ public:
         IF_VERBOSE(1, verbose_stream() << "cubing is not supported on tactics\n");
         return expr_ref_vector(get_manager());
     }
+
+    expr* congruence_next(expr* e) override { return e; }
+    expr* congruence_root(expr* e) override { return e; }
 
     model_converter_ref get_model_converter() const override { return m_mc; }
 
@@ -311,9 +318,9 @@ void tactic2solver::get_model_core(model_ref & m) {
     }
 }
 
-proof * tactic2solver::get_proof() {
+proof * tactic2solver::get_proof_core() {
     if (m_result.get())
-        return m_result->get_proof();
+        return m_result->get_proof_core();
     else
         return nullptr;
 }
@@ -357,9 +364,7 @@ class tactic2solver_factory : public solver_factory {
 public:
     tactic2solver_factory(tactic * t):m_tactic(t) {
     }
-    
-    ~tactic2solver_factory() override {}
-    
+
     solver * operator()(ast_manager & m, params_ref const & p, bool proofs_enabled, bool models_enabled, bool unsat_core_enabled, symbol const & logic) override {
         return mk_tactic2solver(m, m_tactic.get(), p, proofs_enabled, models_enabled, unsat_core_enabled, logic);
     }

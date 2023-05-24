@@ -29,6 +29,7 @@ add_executable(test-z3
   datalog_parser.cpp
   ddnf.cpp
   diff_logic.cpp
+  distribution.cpp
   dl_context.cpp
   dl_product_relation.cpp
   dl_query.cpp
@@ -120,6 +121,7 @@ add_executable(test-z3
   theory_pb.cpp
   timeout.cpp
   total_order.cpp
+  totalizer.cpp
   trigo.cpp
   udoc_relation.cpp
   uint_set.cpp

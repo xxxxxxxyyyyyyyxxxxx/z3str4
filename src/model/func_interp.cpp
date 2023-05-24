@@ -146,7 +146,8 @@ void func_interp::set_else(expr * e) {
 
     ptr_vector<expr> args;
     while (e && is_fi_entry_expr(e, args)) {
-        insert_entry(args.data(), to_app(e)->get_arg(1));
+        if (!get_entry(args.data()))
+            insert_entry(args.data(), to_app(e)->get_arg(1));
         e = to_app(e)->get_arg(2);
     }
 
@@ -294,9 +295,9 @@ void func_interp::compress() {
         m().dec_ref(m_else);
         m_else = new_else;
     }
-    else
+    //else
 #endif
-        if (!m_entries.empty() && is_identity()) {
+    if (!m_entries.empty() && is_identity()) {
         for (func_entry * curr : m_entries) {
             curr->deallocate(m(), m_arity);
         }

@@ -20,7 +20,7 @@ namespace lp  {
         lra(lia.lra),
         m_settings(lia.settings()),
         m_abs_max(zero_of_type<mpq>()),
-        m_var_register(0) {}
+        m_var_register(false) {}
     
     bool hnf_cutter::is_full() const {
         return
@@ -248,9 +248,8 @@ branch y_i >= ceil(y0_i) is impossible.
 
     bool hnf_cutter::init_terms_for_hnf_cut() {
         clear();
-        for (unsigned i = 0; i < lra.terms().size() && !is_full(); i++) {
+        for (unsigned i = 0; i < lra.terms().size() && !is_full(); i++) 
             try_add_term_to_A_for_hnf(tv::term(i));
-        }
         return hnf_has_var_with_non_integral_value();
     }
 

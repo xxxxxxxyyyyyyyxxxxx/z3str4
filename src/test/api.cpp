@@ -4,7 +4,6 @@ Copyright (c) 2015 Microsoft Corporation
 
 --*/
 
-#ifdef _WINDOWS
 #include "api/z3.h"
 #include "api/z3_private.h"
 #include <iostream>
@@ -89,7 +88,7 @@ void test_bvneg() {
 
 static bool cb_called = false;
 static void my_cb(Z3_context, Z3_error_code) {
-  cb_called = true;
+    cb_called = true;
 }
 
 static void test_mk_distinct() {
@@ -102,6 +101,7 @@ static void test_mk_distinct() {
     Z3_ast args[] = { Z3_mk_int64(ctx, 0, bv8), Z3_mk_int64(ctx, 0, bv32) };
     Z3_ast d = Z3_mk_distinct(ctx, 2, args);
     ENSURE(cb_called);
+    VERIFY(!d);
     Z3_del_config(cfg);
     Z3_del_context(ctx);    
     
@@ -112,7 +112,3 @@ void tst_api() {
     test_bvneg();
     test_mk_distinct();
 }
-#else
-void tst_api() {
-}
-#endif

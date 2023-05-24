@@ -150,8 +150,6 @@ namespace {
             if (!first)
                 out << "\n";            
         }
-
-        ~act_case_split_queue() override {};
     };
 
     /**
@@ -966,7 +964,7 @@ namespace {
         }
 
         void display(std::ostream & out) override {
-            if (m_queue.empty() && m_queue2.empty())
+            if (m_queue.empty())
                 return;
             out << "case-splits:\n";
             display_core(out, m_queue, m_head, 1);
@@ -1244,8 +1242,6 @@ namespace {
                 out << "\n";
 
         }
-
-        ~theory_aware_branching_queue() override {};
     };
 }
 

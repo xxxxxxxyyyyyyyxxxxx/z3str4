@@ -487,13 +487,13 @@ namespace smt {
     template<typename Ext>
     class theory_arith<Ext>::gomory_cut_justification : public ext_theory_propagation_justification {
     public:
-         gomory_cut_justification(family_id fid, region & r, 
+        gomory_cut_justification(family_id fid, context& ctx,  
                                  unsigned num_lits, literal const * lits, 
                                  unsigned num_eqs, enode_pair const * eqs,
                                  antecedents& bounds, 
                                  literal consequent):
-        ext_theory_propagation_justification(fid, r, num_lits, lits, num_eqs, eqs, consequent,
-                                             bounds.num_params(), bounds.params("gomory-cut")) {
+            ext_theory_propagation_justification(fid, ctx, num_lits, lits, num_eqs, eqs, consequent,
+                                                 bounds.num_params(), bounds.params("gomory-cut")) {
         }
         // Remark: the assignment must be propagated back to arith
         theory_id get_from_theory() const override { return null_theory_id; }
@@ -514,9 +514,11 @@ namespace smt {
         // SASSERT(m_value[x_i].is_rational()); // infinitesimals are not used for integer variables
         SASSERT(!m_value[x_i].is_int());     // the base variable is not assigned to an integer value.
 
-        if (constrain_free_vars(r) || !is_gomory_cut_target(r)) {
+        bool cfv = constrain_free_vars(r);
+
+        if (cfv || !is_gomory_cut_target(r)) {
             TRACE("gomory_cut", tout << "failed to apply gomory cut:\n";
-                  tout << "constrain_free_vars(r):  " << constrain_free_vars(r) << "\n";);
+                  tout << "constrain_free_vars(r):  " << cfv << "\n";);
             return false;
         }
 
@@ -676,19 +678,16 @@ namespace smt {
         l = ctx.get_literal(bound);
         IF_VERBOSE(10, verbose_stream() << "cut " << bound << "\n");
         ctx.mark_as_relevant(l);
-        dump_lemmas(l, ante);
         auto js = ctx.mk_justification(
             gomory_cut_justification(
-                get_id(), ctx.get_region(),
+                get_id(), ctx, 
                 ante.lits().size(), ante.lits().data(),
                 ante.eqs().size(), ante.eqs().data(), ante, l));
 
-        if (l == false_literal) {
+        if (l == false_literal) 
             ctx.mk_clause(0, nullptr, js, CLS_TH_LEMMA, nullptr);
-        }
-        else {
+        else 
             ctx.assign(l, js);
-        }
         return true;
     }
     
@@ -714,7 +713,7 @@ namespace smt {
         for (; it != end; ++it) {
             if (!it->is_dead()) {
                 if (is_fixed(it->m_var)) {
-                    // WARNINING: it is not safe to use get_value(it->m_var) here, since
+                    // WARNING: it is not safe to use get_value(it->m_var) here, since
                     // get_value(it->m_var) may not satisfy it->m_var bounds at this point.
                     numeral aux = lcm_den * it->m_coeff;
                     consts += aux * lower_bound(it->m_var).get_rational();
@@ -755,12 +754,13 @@ namespace smt {
         if (!(consts / gcds).is_int()) {
             TRACE("gcd_test", tout << "row failed the GCD test:\n"; display_row_info(tout, r););
             antecedents ante(*this);
+            m_stats.m_gcd_conflicts++;
             collect_fixed_var_justifications(r, ante);
             context & ctx         = get_context();
             ctx.set_conflict(
                 ctx.mk_justification(
                     ext_theory_conflict_justification(
-                        get_id(), ctx.get_region(), ante.lits().size(), ante.lits().data(), 
+                        get_id(), ctx, ante.lits().size(), ante.lits().data(), 
                         ante.eqs().size(), ante.eqs().data(), 
                         ante.num_params(), ante.params("gcd-test"))));
             return false;
@@ -834,13 +834,14 @@ namespace smt {
         numeral u1 = floor(u/gcds);
         
         if (u1 < l1) {
+            m_stats.m_gcd_conflicts++;
             TRACE("gcd_test", tout << "row failed the extended GCD test:\n"; display_row_info(tout, r););
             collect_fixed_var_justifications(r, ante);
             context & ctx         = get_context();
             ctx.set_conflict(
                 ctx.mk_justification(
                     ext_theory_conflict_justification(
-                        get_id(), ctx.get_region(), 
+                        get_id(), ctx,  
                         ante.lits().size(), ante.lits().data(), ante.eqs().size(), ante.eqs().data(),
                         ante.num_params(), ante.params("gcd-test"))));
             return false;
@@ -858,11 +859,9 @@ namespace smt {
             return true;
         if (m_eager_gcd)
             return true;
-        typename vector<row>::const_iterator it  = m_rows.begin();
-        typename vector<row>::const_iterator end = m_rows.end();
-        for (; it != end; ++it) {
-            theory_var v = it->get_base_var();
-            if (v != null_theory_var && is_int(v) && !get_value(v).is_int() && !gcd_test(*it)) {
+        for (auto const& e : m_rows) {
+            theory_var v = e.get_base_var();
+            if (v != null_theory_var && is_int(v) && !get_value(v).is_int() && !gcd_test(e)) {
                 if (m_params.m_arith_adaptive_gcd)
                     m_eager_gcd = true;
                 return false;
@@ -883,10 +882,8 @@ namespace smt {
         for (;;) {
             vars.reset();
             // Collect infeasible integer variables.
-            typename vector<row>::const_iterator it  = m_rows.begin();
-            typename vector<row>::const_iterator end = m_rows.end();
-            for (; it != end; ++it) {
-                theory_var v = it->get_base_var();
+            for (auto const& e : m_rows) {
+                theory_var v = e.get_base_var();
                 if (v != null_theory_var && is_int(v) && !get_value(v).is_int() && !is_bounded(v) && !already_processed.contains(v)) {
                     vars.push_back(v);
                     already_processed.insert(v);
@@ -1056,15 +1053,13 @@ namespace smt {
 
         TRACE("arith_int_rows",
               unsigned num = 0;
-              typename vector<row>::const_iterator it  = m_rows.begin();
-              typename vector<row>::const_iterator end = m_rows.end();
-              for (; it != end; ++it) {
-                  theory_var v = it->get_base_var();
+              for (auto const& e : m_rows) {
+                  theory_var v = e.get_base_var();
                   if (v == null_theory_var)
                       continue;
                   if (is_int(v) && !get_value(v).is_int()) {
                       num++;
-                      display_simplified_row(tout, *it);
+                      display_simplified_row(tout, e);
                       tout << "\n";
                   }
               }

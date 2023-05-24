@@ -28,12 +28,19 @@ add_executable(shell
   opt_frontend.cpp
   smtlib_frontend.cpp
   z3_log_frontend.cpp
-  lp_frontend.cpp
 # FIXME: shell should really link against libz3 but it can't due to requiring
 # use of some hidden symbols. Also libz3 has the ``api_dll`` component which
 # we don't want (I think).
   ${shell_object_files}
 )
+
+set_target_properties(shell PROPERTIES
+    # Position independent code needed in shared libraries
+    POSITION_INDEPENDENT_CODE ON
+    # Symbol visibility
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON)
+
 z3_add_install_tactic_rule(${shell_deps})
 z3_add_memory_initializer_rule(${shell_deps})
 z3_add_gparams_register_modules_rule(${shell_deps})

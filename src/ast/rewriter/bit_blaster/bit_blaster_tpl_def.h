@@ -16,6 +16,8 @@ Author:
 Revision History:
 
 --*/
+#pragma once
+
 #include "util/rational.h"
 #include "util/common_msgs.h"
 #include "ast/rewriter/bit_blaster/bit_blaster_tpl.h"
@@ -25,7 +27,7 @@ Revision History:
 
 template<typename Cfg>
 void bit_blaster_tpl<Cfg>::checkpoint() {
-    if (memory::get_allocation_size() > m_max_memory)
+    if (memory::get_allocation_size() > m_max_memory || memory::above_high_watermark())
         throw rewriter_exception(Z3_MAX_MEMORY_MSG);
     if (!m().inc())
         throw rewriter_exception(m().limit().get_cancel_msg());
@@ -1122,6 +1124,8 @@ bool bit_blaster_tpl<Cfg>::mk_const_case_multiplier(unsigned sz, expr * const * 
             case_size *= 2;        
     }
     if (case_size >= circuit_size) 
+        return false;
+    if (sz >= 100)
         return false;
     
     SASSERT(out_bits.empty());

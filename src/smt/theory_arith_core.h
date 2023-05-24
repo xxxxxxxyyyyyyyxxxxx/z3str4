@@ -29,22 +29,16 @@ namespace smt {
 
     template<typename Ext>
     void theory_arith<Ext>::found_unsupported_op(app * n) {
-        if (!m_found_unsupported_op) {
-            TRACE("arith", tout << "found non supported expression:\n" << mk_pp(n, m) << "\n";);
-            ctx.push_trail(value_trail<bool>(m_found_unsupported_op));
-            m_found_unsupported_op = true;
-        }
+        CTRACE("arith", m_unsupported_ops.empty(), tout << "found non supported expression:\n" << mk_pp(n, m) << "\n";);
+        m_unsupported_ops.push_back(n);
+        ctx.push_trail(push_back_vector<ptr_vector<app>>(m_unsupported_ops));
     }
 
     template<typename Ext>
     void theory_arith<Ext>::found_underspecified_op(app * n) {
+        CTRACE("arith", m_underspecified_ops.empty(), tout << "found underspecified expression:\n" << mk_pp(n, m) << "\n";);
         m_underspecified_ops.push_back(n);
         ctx.push_trail(push_back_vector<ptr_vector<app>>(m_underspecified_ops));
-        if (!m_found_underspecified_op) {
-            TRACE("arith", tout << "found underspecified expression:\n" << mk_pp(n, m) << "\n";);
-            ctx.push_trail(value_trail<bool>(m_found_underspecified_op));
-            m_found_underspecified_op = true;
-        }
 
         expr* e = nullptr;
         if (m_util.is_div(n)) {                
@@ -53,11 +47,15 @@ namespace smt {
         else if (m_util.is_idiv(n)) {                
             e = m_util.mk_idiv0(n->get_arg(0), n->get_arg(1));
         }
-        else if (m_util.is_rem(n)) {                
-            e = m_util.mk_rem0(n->get_arg(0), n->get_arg(1));
+        else if (m_util.is_rem(n)) {
+            expr* z = m_util.mk_int(0);
+            e = m_util.mk_rem0(n->get_arg(0), z);
+            n = m_util.mk_rem(n->get_arg(0), z);
         }
-        else if (m_util.is_mod(n)) {                
-            e = m_util.mk_mod0(n->get_arg(0), n->get_arg(1));
+        else if (m_util.is_mod(n)) {
+            expr* z = m_util.mk_int(0);
+            e = m_util.mk_mod0(n->get_arg(0), z);
+            n = m_util.mk_mod(n->get_arg(0), z);
         }
         else if (m_util.is_power(n)) {                
             e = m_util.mk_power0(n->get_arg(0), n->get_arg(1));
@@ -160,7 +158,6 @@ namespace smt {
             case OP_MOD:
             case OP_DIV0:
             case OP_IDIV0:
-            case OP_REM0:
             case OP_MOD0:
                 return true;
             default:
@@ -492,6 +489,7 @@ namespace smt {
     void theory_arith<Ext>::mk_axiom(expr * ante, expr * conseq, bool simplify_conseq) {
         th_rewriter & s  = ctx.get_rewriter();
         expr_ref s_ante(m), s_conseq(m);
+        expr_ref p_ante(ante, m), p_conseq(conseq, m); // pinned versions
         expr* s_conseq_n, * s_ante_n;
         bool negated;
 
@@ -562,7 +560,7 @@ namespace smt {
         if (!m_util.is_zero(divisor)) {
             // if divisor is zero, then idiv and mod are uninterpreted functions.
             expr_ref div(m), mod(m), zero(m), abs_divisor(m), one(m);
-            expr_ref eqz(m), eq(m), lower(m), upper(m);
+            expr_ref eqz(m), eq(m), lower(m), upper(m), qr(m), qr1(m), le(m), ge(m);
             div         = m_util.mk_idiv(dividend, divisor);
             mod         = m_util.mk_mod(dividend, divisor);
             zero        = m_util.mk_int(0);
@@ -570,27 +568,50 @@ namespace smt {
             abs_divisor = m_util.mk_sub(m.mk_ite(m_util.mk_lt(divisor, zero), m_util.mk_sub(zero, divisor), divisor), one);
             s(abs_divisor);
             eqz         = m.mk_eq(divisor, zero);
-            eq          = m.mk_eq(m_util.mk_add(m_util.mk_mul(divisor, div), mod), dividend);
+            qr          = m_util.mk_add(m_util.mk_mul(divisor, div), mod);
+            eq          = m.mk_eq(qr, dividend);
             lower       = m_util.mk_ge(mod, zero);
             upper       = m_util.mk_le(mod, abs_divisor);
             TRACE("div_axiom_bug",
-                  tout << "eqz:   " << eqz << " neq: " << eq << "\n";
+                  tout << "eqz:   " << eqz << "\n";
+                  tout << "neq:   " << eq << "\n";
                   tout << "lower: " << lower << "\n";
                   tout << "upper: " << upper << "\n";);
 
             mk_axiom(eqz, eq,    false);
             mk_axiom(eqz, lower, false);
             mk_axiom(eqz, upper, !m_util.is_numeral(abs_divisor));
+
             rational k;
 
-            if (!m_util.is_numeral(divisor)) {
-                // (=> (> y 0) (<= (* y (div x y)) x))
-                // (=> (< y 0) ???)
-                expr_ref div_ge(m), div_non_pos(m);
+            m_arith_eq_adapter.mk_axioms(ensure_enode(qr), ensure_enode(dividend));
+
+            // non-linear divisors/mod have to be flattened for the non-linear solver to understand the terms.
+            // to ensure this use the rewriter. This is a hack required to fix a latent bug that affects the
+            // legacy arithmetic solver broadly. It is not something that the newer arithmetic solver suffers from.
+            qr1 = qr;
+            s(qr1);
+            if (qr != qr1) {
+                expr_ref eq(m.mk_eq(qr, qr1), m);
+                ctx.internalize(eq, false);
+                literal qeq = ctx.get_literal(eq);
+                ctx.mark_as_relevant(qeq);
+                ctx.mk_th_axiom(get_id(), 1, &qeq);
+                m_arith_eq_adapter.mk_axioms(ensure_enode(qr), ensure_enode(qr1));                
+            }
+
+            if (m_util.is_zero(dividend)) {
+                mk_axiom(eqz, m.mk_eq(div, zero));
+                mk_axiom(eqz, m.mk_eq(mod, zero));
+            }
+
+            // (or (= y 0)  (<= (* y (div x y)) x))
+            else if (!m_util.is_numeral(divisor)) {
+                expr_ref div_ge(m);
                 div_ge = m_util.mk_ge(m_util.mk_sub(dividend, m_util.mk_mul(divisor, div)), zero);
-                s(div_ge);
-                div_non_pos = m_util.mk_le(divisor, zero);
-                mk_axiom(div_non_pos, div_ge, false);
+                s(div_ge);                
+                mk_axiom(eqz, div_ge, false);
+                TRACE("arith", tout << eqz << " " << div_ge << "\n");
             }
 
             if (m_params.m_arith_enum_const_mod && m_util.is_numeral(divisor, k) &&
@@ -1020,13 +1041,14 @@ namespace smt {
         inf_numeral const & k1(a1->get_k());
         atom_kind kind1 = a1->get_atom_kind();
         TRACE("mk_bound_axioms", display_atom(tout << "making bound axioms for " << a1 << " ", a1, true); tout << "\n";);
+
         typename atoms::iterator it  = occs.begin();
         typename atoms::iterator end = occs.end();
-
         typename atoms::iterator lo_inf = end, lo_sup = end;
         typename atoms::iterator hi_inf = end, hi_sup = end;
+
         for (; it != end; ++it) {
-            atom * a2 = *it;
+            atom* a2 = *it;
             inf_numeral const & k2(a2->get_k());
             atom_kind kind2 = a2->get_atom_kind();
             TRACE("mk_bound_axioms", display_atom(tout << "compare " << a2 << " ", a2, true); tout << "\n";);
@@ -1507,9 +1529,13 @@ namespace smt {
             }
         }
         while (m_final_check_idx != old_idx);
-        if (result == FC_DONE && m_found_unsupported_op) {
-            TRACE("arith", tout << "Found unsupported operation\n";);
-            result = FC_GIVEUP;
+        if (result == FC_DONE) {
+            for (app* n : m_unsupported_ops) {
+                if (!ctx.is_relevant(n))
+                    continue;
+                TRACE("arith", tout << "Found unsupported operation " << mk_pp(n, m) << "\n");
+                result = FC_GIVEUP;
+            }
         }
         return result;
     }
@@ -1708,26 +1734,12 @@ namespace smt {
         m_params(ctx.get_fparams()),
         m_util(m),
         m_arith_eq_solver(m),
-        m_found_unsupported_op(false),
-        m_found_underspecified_op(false),
         m_arith_eq_adapter(*this, m_util),
-        m_asserted_qhead(0),
-        m_row_vars_top(0),
         m_to_patch(1024),
-        m_blands_rule(false),
         m_random(ctx.get_fparams().m_arith_random_seed),
-        m_num_conflicts(0),
-        m_branch_cut_counter(0),
         m_eager_gcd(m_params.m_arith_eager_gcd),
-        m_final_check_idx(0),
         m_antecedents_index(0),
         m_var_value_table(DEFAULT_HASHTABLE_INITIAL_CAPACITY, var_value_hash(*this), var_value_eq(*this)),
-        m_liberal_final_check(true),
-        m_changed_assignment(false),
-        m_assume_eq_head(0),
-        m_model_depends_on_computed_epsilon(false),
-        m_nl_rounds(0),
-        m_nl_gb_exhausted(false),
         m_nl_new_exprs(m),
         m_bound_watch(null_bool_var) {
     }
@@ -2679,8 +2691,9 @@ namespace smt {
        Then this bound is used to produce a bound for the monomial variable.
     */
     template<typename Ext>
-    void theory_arith<Ext>::imply_bound_for_monomial(row const & r, int idx, bool is_lower) {
+    unsigned theory_arith<Ext>::imply_bound_for_monomial(row const & r, int idx, bool is_lower) {
         row_entry const & entry = r[idx];
+        unsigned count = 0;
         if (m_unassigned_atoms[entry.m_var] > 0) {
             inf_numeral implied_k;
             typename vector<row_entry>::const_iterator it  = r.begin_entries();
@@ -2702,7 +2715,7 @@ namespace smt {
                           tout << "implying lower bound for v" << entry.m_var << " " << implied_k << " using row:\n";
                           display_row_info(tout, r);
                           display_var(tout, entry.m_var););
-                    mk_implied_bound(r, idx, is_lower, entry.m_var, B_LOWER, implied_k);
+                    count += mk_implied_bound(r, idx, is_lower, entry.m_var, B_LOWER, implied_k);
                 }
             }
             else {
@@ -2713,10 +2726,11 @@ namespace smt {
                           tout << "implying upper bound for v" << entry.m_var << " " << implied_k << " using row:\n";
                           display_row_info(tout, r);
                           display_var(tout, entry.m_var););
-                    mk_implied_bound(r, idx, is_lower, entry.m_var, B_UPPER, implied_k);
+                    count += mk_implied_bound(r, idx, is_lower, entry.m_var, B_UPPER, implied_k);
                 }
             }
         }
+        return count;
     }
 
     /**
@@ -2727,7 +2741,7 @@ namespace smt {
        for the monomial variables.
     */
     template<typename Ext>
-    void theory_arith<Ext>::imply_bound_for_all_monomials(row const & r, bool is_lower) {
+    unsigned theory_arith<Ext>::imply_bound_for_all_monomials(row const & r, bool is_lower) {
         // Traverse the row once and compute
         // bb = (Sum_{a_i < 0} -a_i*lower(x_i)) + (Sum_{a_j > 0} -a_j * upper(x_j))  If is_lower = true
         // bb = (Sum_{a_i > 0} -a_i*lower(x_i)) + (Sum_{a_j < 0} -a_j * upper(x_j))  If is_lower = false
@@ -2740,6 +2754,7 @@ namespace smt {
             }
         }
 
+        unsigned count = 0;
         inf_numeral implied_k;
         typename vector<row_entry>::const_iterator it  = r.begin();
         typename vector<row_entry>::const_iterator end = r.end();
@@ -2763,7 +2778,7 @@ namespace smt {
                               tout << "implying lower bound for v" << it->m_var << " " << implied_k << " using row:\n";
                               display_row_info(tout, r);
                               display_var(tout, it->m_var););
-                        mk_implied_bound(r, idx, is_lower, it->m_var, B_LOWER, implied_k);
+                        count += mk_implied_bound(r, idx, is_lower, it->m_var, B_LOWER, implied_k);
                     }
                 }
                 else {
@@ -2775,11 +2790,12 @@ namespace smt {
                               tout << "implying upper bound for v" << it->m_var << " " << implied_k << " using row:\n";
                               display_row_info(tout, r);
                               display_var(tout, it->m_var););
-                        mk_implied_bound(r, idx, is_lower, it->m_var, B_UPPER, implied_k);
+                        count += mk_implied_bound(r, idx, is_lower, it->m_var, B_UPPER, implied_k);
                     }
                 }
             }
         }
+        return count;
     }
 
     /**
@@ -2901,10 +2917,11 @@ namespace smt {
     }
 
     template<typename Ext>
-    void theory_arith<Ext>::mk_implied_bound(row const & r, unsigned idx, bool is_lower, theory_var v, bound_kind kind, inf_numeral const & k) {
+    unsigned theory_arith<Ext>::mk_implied_bound(row const & r, unsigned idx, bool is_lower, theory_var v, bound_kind kind, inf_numeral const & k) {
         atoms const & as                 = m_var_occs[v];
         inf_numeral const & epsilon      = get_epsilon(v);
         inf_numeral delta;
+        unsigned count = 0;
         for (atom* a : as) {
             bool_var bv = a->get_bool_var();
             literal  l(bv);
@@ -2921,6 +2938,7 @@ namespace smt {
                         TRACE("propagate_bounds", tout << "v" << v << " >= " << k << ", v" << v << " >= " << k2 << ", delta: " << delta << "\n";
                               display_row(tout, r););
                         assign_bound_literal(l, r, idx, is_lower, delta);
+                        ++count;
                     }
                     // v <= k  k <  k2  |-  v < k2  |- not v >= k2
                     if (kind == B_UPPER && k <  k2) {
@@ -2937,6 +2955,7 @@ namespace smt {
                             TRACE("propagate_bounds", tout << "v" << v << " <= " << k << ", not v" << v << " >= " << k2 << ", delta: " << delta << "\n";
                                   display_row(tout, r););
                             assign_bound_literal(~l, r, idx, is_lower, delta);
+                            ++count;
                         }
                     }
                 }
@@ -2952,6 +2971,7 @@ namespace smt {
                             TRACE("propagate_bounds", tout << "v" << v << " >= " << k << ", not v" << v << " <= " << k2 << ", delta: " << delta << "\n";
                                   display_row(tout, r););
                             assign_bound_literal(~l, r, idx, is_lower, delta);
+                            ++count;
                         }
                     }
                     // v <= k  k <= k2 |-  v <= k2
@@ -2963,29 +2983,15 @@ namespace smt {
                         TRACE("propagate_bounds", tout << "v" << v << " <= " << k << ", v" << v << " <= " << k2 << ", delta: " << delta << "\n";
                               display_row(tout, r););
                         assign_bound_literal(l, r, idx, is_lower, delta);
+                        ++count;
                     }
                 }
             }
         }
+        return count;
     }
 
-    template<typename Ext>
-    void theory_arith<Ext>::dump_lemmas(literal l, antecedents const& ante) {
-        if (dump_lemmas()) {
-            TRACE("arith", ante.display(tout) << " --> "; ctx.display_detailed_literal(tout, l); tout << "\n";);
-            ctx.display_lemma_as_smt_problem(ante.lits().size(), ante.lits().data(),
-                                             ante.eqs().size(), ante.eqs().data(), l);
 
-        }
-    }
-
-    template<typename Ext>
-    void theory_arith<Ext>::dump_lemmas(literal l, derived_bound const& ante) {
-        if (dump_lemmas()) {
-            ctx.display_lemma_as_smt_problem(ante.lits().size(), ante.lits().data(),
-                                             ante.eqs().size(), ante.eqs().data(), l);
-        }
-    }
 
     template<typename Ext>
     void theory_arith<Ext>::assign_bound_literal(literal l, row const & r, unsigned idx, bool is_lower, inf_numeral & delta) {
@@ -2993,32 +2999,33 @@ namespace smt {
         antecedents ante(*this);
         explain_bound(r, idx, is_lower, delta, ante);
 
+
         TRACE("propagate_bounds",
               ante.display(tout) << " --> ";
               ctx.display_detailed_literal(tout, l);
               tout << "\n";);
-        dump_lemmas(l, ante);
+
+
+
+        TRACE("arith", tout << ctx.get_scope_level() << "\n";
+              ctx.display_detailed_literal(tout, l) << "\n");
 
         if (ante.lits().size() < small_lemma_size() && ante.eqs().empty()) {
             literal_vector & lits = m_tmp_literal_vector2;
             lits.reset();
             lits.push_back(l);
-            literal_vector::const_iterator it  = ante.lits().begin();
-            literal_vector::const_iterator end = ante.lits().end();
-            for (; it != end; ++it)
-                lits.push_back(~(*it));
+            for (auto const& lit : ante.lits())
+                lits.push_back(~lit);
             justification * js = nullptr;
-            if (proofs_enabled()) {
+            if (proofs_enabled()) 
                 js = alloc(theory_lemma_justification, get_id(), ctx, lits.size(), lits.data(),
                            ante.num_params(), ante.params("assign-bounds"));
-            }
             ctx.mk_clause(lits.size(), lits.data(), js, CLS_TH_LEMMA, nullptr);
         }
         else {
-            region & r = ctx.get_region();
             ctx.assign(l, ctx.mk_justification(
                            ext_theory_propagation_justification(
-                               get_id(), r, ante.lits().size(), ante.lits().data(),
+                               get_id(), ctx, ante.lits().size(), ante.lits().data(),
                                ante.eqs().size(), ante.eqs().data(), l,
                                ante.num_params(), ante.params("assign-bounds"))));
         }
@@ -3031,6 +3038,7 @@ namespace smt {
     template<typename Ext>
     void theory_arith<Ext>::propagate_bounds() {
         TRACE("propagate_bounds_detail", display(tout););
+        unsigned num_prop = 0, count = 0;
         for (unsigned r_idx : m_to_check) {
             row & r = m_rows[r_idx];
             if (r.get_base_var() != null_theory_var) {
@@ -3039,19 +3047,21 @@ namespace smt {
                     int upper_idx;
                     is_row_useful_for_bound_prop(r, lower_idx, upper_idx);
 
-                    if (lower_idx >= 0) {
-                        imply_bound_for_monomial(r, lower_idx, true);
-                    }
-                    else if (lower_idx == -1) {
-                        imply_bound_for_all_monomials(r, true);
-                    }
-
-                    if (upper_idx >= 0) {
-                        imply_bound_for_monomial(r, upper_idx, false);
-                    }
-                    else if (upper_idx == -1) {
-                        imply_bound_for_all_monomials(r, false);
-                    }
+                    ++num_prop;
+                    if (lower_idx >= 0) 
+                        count += imply_bound_for_monomial(r, lower_idx, true);
+                    else if (lower_idx == -1) 
+                        count += imply_bound_for_all_monomials(r, true);
+                    else
+                        --num_prop;
+                    
+                    ++num_prop;
+                    if (upper_idx >= 0) 
+                        count += imply_bound_for_monomial(r, upper_idx, false);
+                    else if (upper_idx == -1) 
+                        count += imply_bound_for_all_monomials(r, false);
+                    else
+                        --num_prop;
 
                     // sneaking cheap eq detection in this loop
                     propagate_cheap_eq(r_idx);
@@ -3067,6 +3077,7 @@ namespace smt {
 #endif
             }
         }
+
         TRACE("arith_eq", tout << "done\n";);
         m_to_check.reset();
         m_in_to_check.reset();
@@ -3081,13 +3092,11 @@ namespace smt {
     template<typename Ext>
     void theory_arith<Ext>::set_conflict(antecedents const& ante, antecedents& bounds, char const* proof_rule) {
         set_conflict(ante.lits().size(), ante.lits().data(), ante.eqs().size(), ante.eqs().data(), bounds, proof_rule);
-        dump_lemmas(false_literal, ante);
     }
 
     template<typename Ext>
     void theory_arith<Ext>::set_conflict(derived_bound const& ante, antecedents& bounds, char const* proof_rule) {
         set_conflict(ante.lits().size(), ante.lits().data(), ante.eqs().size(), ante.eqs().data(), bounds, proof_rule);
-        dump_lemmas(false_literal, ante);
     }
 
     template<typename Ext>
@@ -3097,6 +3106,8 @@ namespace smt {
         m_stats.m_conflicts++;
         m_num_conflicts++;
         TRACE("arith_conflict",
+              if (proof_rule)
+                  tout << proof_rule << "\n";
               tout << "scope: " << ctx.get_scope_level() << "\n";
               for (unsigned i = 0; i < num_literals; i++) {
                   ctx.display_detailed_literal(tout, lits[i]);
@@ -3119,7 +3130,7 @@ namespace smt {
         record_conflict(num_literals, lits, num_eqs, eqs, bounds.num_params(), bounds.params(proof_rule));
         ctx.set_conflict(
             ctx.mk_justification(
-                ext_theory_conflict_justification(get_id(), ctx.get_region(), num_literals, lits, num_eqs, eqs,
+                ext_theory_conflict_justification(get_id(), ctx, num_literals, lits, num_eqs, eqs,
                                                   bounds.num_params(), bounds.params(proof_rule))));
     }
 
@@ -3381,7 +3392,7 @@ namespace smt {
     }
 
     template<typename Ext>
-    void theory_arith<Ext>::pop_scope_eh(unsigned num_scopes) {
+    void theory_arith<Ext>::pop_scope_eh(unsigned num_scopes) {        
         CASSERT("arith", wf_rows());
         CASSERT("arith", wf_columns());
         CASSERT("arith", valid_row_assignment());
@@ -3401,7 +3412,6 @@ namespace smt {
         restore_unassigned_atoms(s.m_unassigned_atoms_trail_lim);
         m_asserted_bounds.shrink(s.m_asserted_bounds_lim);
         m_asserted_qhead = s.m_asserted_qhead_old;
-        TRACE("arith_pop_scope_bug", tout << "num_vars: " << get_num_vars() << ", num_old_vars: " << get_old_num_vars(num_scopes) << "\n";);
         restore_nl_propagated_flag(s.m_nl_propagated_lim);
         m_nl_monomials.shrink(s.m_nl_monomials_lim);
         del_atoms(s.m_atoms_lim);

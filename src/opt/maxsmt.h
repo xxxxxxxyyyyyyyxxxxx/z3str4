@@ -42,7 +42,7 @@ namespace opt {
 
     class maxsmt_solver {
     public:        
-        virtual ~maxsmt_solver() {}
+        virtual ~maxsmt_solver() = default;
         virtual lbool operator()() = 0;
         virtual rational get_lower() const = 0;
         virtual rational get_upper() const = 0;
@@ -85,7 +85,6 @@ namespace opt {
     public:
         maxsmt_solver_base(maxsat_context& c, vector<soft>& soft, unsigned index);
         
-        ~maxsmt_solver_base() override {}
         rational get_lower() const override { return m_lower; }
         rational get_upper() const override { return m_upper; }
         bool get_assignment(unsigned index) const override { return m_soft[index].is_true(); }
@@ -138,7 +137,7 @@ namespace opt {
         params_ref       m_params;
     public:
         maxsmt(maxsat_context& c, unsigned id);
-        lbool operator()();
+        lbool operator()(bool committed);
         void updt_params(params_ref& p);
         void add(expr* f, rational const& w); 
         unsigned size() const { return m_soft.size(); }

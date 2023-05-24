@@ -41,13 +41,14 @@ Notes:
 #include "muz/fp/horn_tactic.h"
 #include "smt/smt_solver.h"
 #include "sat/sat_solver/inc_sat_solver.h"
+#include "sat/sat_solver/sat_smt_solver.h"
 #include "ast/rewriter/bv_rewriter.h"
 #include "solver/solver2tactic.h"
-#include "solver/parallel_tactic.h"
+#include "solver/parallel_tactical.h"
 #include "solver/parallel_params.hpp"
-#include "smt/params/smt_params.h"
-#include "tactic/tactic_params.hpp"
+#include "params/tactic_params.hpp"
 #include "parsers/smt2/smt2parser.h"
+#include "sat/sat_params.hpp"
 
 
 
@@ -119,6 +120,15 @@ static solver* mk_special_solver_for_logic(ast_manager & m, params_ref const & p
     return nullptr;
 }
 
+solver* mk_smt2_solver(ast_manager& m, params_ref const& p, symbol const& logic) {
+    sat_params sp(p);
+    if (sp.smt())
+        return mk_sat_smt_solver(m, p);
+    if (sp.euf())
+        return mk_inc_sat_solver(m, p);
+    return mk_smt_solver(m, p, logic);
+}
+
 static solver* mk_solver_for_logic(ast_manager & m, params_ref const & p, symbol const& logic) {
     bv_rewriter rw(m);
     solver* s = mk_special_solver_for_logic(m, p, logic);
@@ -127,8 +137,13 @@ static solver* mk_solver_for_logic(ast_manager & m, params_ref const & p, symbol
         s = mk_inc_sat_solver(m, p);
     if (!s && tp.default_tactic() == "sat")
         s = mk_inc_sat_solver(m, p);
+<<<<<<< HEAD
     if (!s)
         s = mk_smt_solver(m, p, logic);
+=======
+    if (!s)
+        s = mk_smt2_solver(m, p, logic);
+>>>>>>> z3-4.12.2
     return s;
 }
 
@@ -137,7 +152,10 @@ class smt_strategic_solver_factory : public solver_factory {
 public:
     smt_strategic_solver_factory(symbol const & logic):m_logic(logic) {}
 
+<<<<<<< HEAD
     ~smt_strategic_solver_factory() override {}
+=======
+>>>>>>> z3-4.12.2
     solver * operator()(ast_manager & m, params_ref const & p, bool proofs_enabled, bool models_enabled, bool unsat_core_enabled, symbol const & logic) override {
         symbol l;
         if (m_logic != symbol::null)
@@ -174,8 +192,4 @@ public:
 
 solver_factory * mk_smt_strategic_solver_factory(symbol const & logic) {
     return alloc(smt_strategic_solver_factory, logic);
-}
-
-solver* mk_smt2_solver(ast_manager& m, params_ref const& p) {
-    return mk_inc_sat_solver(m, p);
 }

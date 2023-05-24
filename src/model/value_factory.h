@@ -60,8 +60,9 @@ public:
 };
 
 class basic_factory : public value_factory {
+    random_gen m_rand;
 public:
-    basic_factory(ast_manager & m);
+    basic_factory(ast_manager & m, unsigned seed);
     
     expr * get_some_value(sort * s) override;
 
@@ -193,9 +194,8 @@ public:
         while (!is_new) {
             result = mk_value(next, s, is_new);
             next++;
-            if (has_max && next > max_size + start) {
-                return nullptr;
-            }
+            if (has_max && next > max_size + start)
+                return nullptr;            
         }
         SASSERT(result != 0);
         return result;
@@ -230,7 +230,6 @@ class user_sort_factory : public simple_factory<unsigned> {
     app * mk_value_core(unsigned const & val, sort * s) override;
 public:
     user_sort_factory(ast_manager & m);
-    ~user_sort_factory() override {}
 
     /**
        \brief Make the universe of \c s finite, by preventing new

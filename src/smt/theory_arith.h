@@ -41,7 +41,7 @@ Revision History:
 namespace smt {
     
     struct theory_arith_stats {
-        unsigned m_conflicts, m_add_rows, m_pivots, m_diseq_cs, m_gomory_cuts, m_branches, m_gcd_tests, m_patches, m_patches_succ;
+        unsigned m_conflicts, m_add_rows, m_pivots, m_diseq_cs, m_gomory_cuts, m_branches, m_gcd_tests, m_gcd_conflicts, m_patches, m_patches_succ;
         unsigned m_assert_lower, m_assert_upper, m_assert_diseq, m_core2th_eqs, m_core2th_diseqs;
         unsigned m_th2core_eqs, m_th2core_diseqs, m_bound_props, m_offset_eqs, m_fixed_eqs, m_offline_eqs;
         unsigned m_max_min; 
@@ -294,7 +294,7 @@ namespace smt {
                 m_bound_kind(k),
                 m_atom(a) {
             }
-            virtual ~bound() {}
+            virtual ~bound() = default;
             theory_var get_var() const { return m_var; }
             bound_kind get_bound_kind() const { return static_cast<bound_kind>(m_bound_kind); }
             bool is_atom() const { return m_atom; }
@@ -319,7 +319,6 @@ namespace smt {
         public:
             atom(bool_var bv, theory_var v, inf_numeral const & k, atom_kind kind);
             atom_kind get_atom_kind() const { return static_cast<atom_kind>(m_atom_kind); }
-            ~atom() override {}
             inline inf_numeral const & get_k() const { return m_k; }
             bool_var get_bool_var() const { return m_bvar; }
             bool is_true() const { return m_is_true; }
@@ -341,7 +340,6 @@ namespace smt {
                 m_rhs(rhs) {
                 SASSERT(m_lhs->get_root() == m_rhs->get_root());
             }
-            ~eq_bound() override {}
             bool has_justification() const override { return true; }
             void push_justification(antecedents& a, numeral const& coeff, bool proofs_enabled) override {
                 SASSERT(m_lhs->get_root() == m_rhs->get_root());
@@ -357,7 +355,6 @@ namespace smt {
             friend class theory_arith;
         public:
             derived_bound(theory_var v, inf_numeral const & val, bound_kind k):bound(v, val, k, false) {}
-            ~derived_bound() override {}
             literal_vector const& lits() const { return m_lits; }
             eq_vector const& eqs() const { return m_eqs; }
             bool has_justification() const override { return true; }
@@ -374,7 +371,6 @@ namespace smt {
             friend class theory_arith;
         public:
             justified_derived_bound(theory_var v, inf_numeral const & val, bound_kind k):derived_bound(v, val, k) {}
-            ~justified_derived_bound() override {}
             bool has_justification() const override { return true; }
             void push_justification(antecedents& a, numeral const& coeff, bool proofs_enabled) override;
             void push_lit(literal l, numeral const& coeff) override;
@@ -440,9 +436,8 @@ namespace smt {
         theory_arith_params &   m_params;
         arith_util              m_util;
         arith_eq_solver         m_arith_eq_solver;
-        bool                    m_found_unsupported_op;
-        bool                    m_found_underspecified_op;
         ptr_vector<app>         m_underspecified_ops;
+        ptr_vector<app>         m_unsupported_ops;
         arith_eq_adapter        m_arith_eq_adapter;
         vector<row>             m_rows;
         svector<unsigned>       m_dead_rows;
@@ -457,18 +452,18 @@ namespace smt {
         svector<int>            m_var_pos;          // temporary array used in add_rows
         atoms                   m_atoms;            // set of theory atoms
         ptr_vector<bound>       m_asserted_bounds;  // set of asserted bounds
-        unsigned                m_asserted_qhead;   
+        unsigned                m_asserted_qhead = 0;   
         ptr_vector<atom>        m_new_atoms;        // new bound atoms that have yet to be internalized.
         svector<theory_var>     m_nl_monomials;     // non linear monomials
         svector<theory_var>     m_nl_propagated;    // non linear monomials that became linear
         v_dependency_manager    m_dep_manager;      // for tracking bounds during non-linear reasoning
 
         vector<uint_set>        m_row_vars;         // variables in a given row. Used during internalization to detect repeated variables.
-        unsigned                m_row_vars_top;
+        unsigned                m_row_vars_top = 0;
 
         var_heap                m_to_patch;         // heap containing all variables v s.t. m_value[v] does not satisfy bounds of v.
         nat_set                 m_left_basis;       // temporary: set of variables that already left the basis in make_feasible
-        bool                    m_blands_rule;
+        bool                    m_blands_rule = false;
 
         svector<unsigned>       m_update_trail_stack;    // temporary trail stack used to restore the last feasible assignment.
         nat_set                 m_in_update_trail_stack; // set of variables in m_update_trail_stack
@@ -478,11 +473,11 @@ namespace smt {
         
         inf_numeral             m_tmp;
         random_gen              m_random;
-        unsigned                m_num_conflicts;
+        unsigned                m_num_conflicts = 0;
 
-        unsigned                m_branch_cut_counter;
+        unsigned                m_branch_cut_counter = 0;
         bool                    m_eager_gcd; // true if gcd should be applied at every add_row
-        unsigned                m_final_check_idx;
+        unsigned                m_final_check_idx = 0;
 
 
         // backtracking
@@ -548,9 +543,6 @@ namespace smt {
         unsigned small_lemma_size() const { return m_params.m_arith_small_lemma_size; }
         bool relax_bounds() const { return m_params.m_arith_stronger_lemmas; }
         bool skip_big_coeffs() const { return m_params.m_arith_skip_rows_with_big_coeffs; }
-        bool dump_lemmas() const { return m_params.m_arith_dump_lemmas; }
-        void dump_lemmas(literal l, antecedents const& ante);
-        void dump_lemmas(literal l, derived_bound const& ante);
         bool process_atoms() const;
         unsigned get_num_conflicts() const { return m_num_conflicts; }
         var_kind get_var_kind(theory_var v) const { return m_data[v].kind(); }
@@ -684,7 +676,7 @@ namespace smt {
 
            See also m_changed_assignment flag.
         */
-        bool    m_liberal_final_check; 
+        bool    m_liberal_final_check = true; 
         final_check_status final_check_core();
         final_check_status final_check_eh() override;
         
@@ -742,7 +734,7 @@ namespace smt {
         // Assignment management
         //
         // -----------------------------------
-        bool m_changed_assignment; //!< auxiliary variable set to true when the assignment is changed.
+        bool m_changed_assignment = false; //!< auxiliary variable set to true when the assignment is changed.
         void save_value(theory_var v);
         void discard_update_trail();
         void restore_assignment();
@@ -798,11 +790,11 @@ namespace smt {
         void mark_row_for_bound_prop(unsigned r1);
         void mark_rows_for_bound_prop(theory_var v);
         void is_row_useful_for_bound_prop(row const & r, int & lower_idx, int & upper_idx) const;
-        void imply_bound_for_monomial(row const & r, int idx, bool lower);
-        void imply_bound_for_all_monomials(row const & r, bool lower);
+        unsigned imply_bound_for_monomial(row const & r, int idx, bool lower);
+        unsigned imply_bound_for_all_monomials(row const & r, bool lower);
         void explain_bound(row const & r, int idx, bool lower, inf_numeral & delta, 
                            antecedents & antecedents);
-        void mk_implied_bound(row const & r, unsigned idx, bool lower, theory_var v, bound_kind kind, inf_numeral const & k);
+        unsigned mk_implied_bound(row const & r, unsigned idx, bool lower, theory_var v, bound_kind kind, inf_numeral const & k);
         void assign_bound_literal(literal l, row const & r, unsigned idx, bool lower, inf_numeral & delta);
         void propagate_bounds();
 
@@ -829,7 +821,7 @@ namespace smt {
         var_set         m_tmp_var_set;
         var_set         m_tmp_var_set2;
         svector<std::pair<theory_var, theory_var> >       m_assume_eq_candidates;
-        unsigned                                          m_assume_eq_head;
+        unsigned                                          m_assume_eq_head = 0;
         bool random_update(theory_var v);
         void mutate_assignment();
         bool assume_eqs_core();
@@ -961,10 +953,10 @@ namespace smt {
         //
         // -----------------------------------
         typedef int_hashtable<int_hash, default_eq<int> > row_set;
-        bool            m_model_depends_on_computed_epsilon;
-        unsigned        m_nl_rounds;
-        bool            m_nl_gb_exhausted;
-        unsigned        m_nl_strategy_idx; // for fairness
+        bool            m_model_depends_on_computed_epsilon = false;
+        unsigned        m_nl_rounds = 0;
+        bool            m_nl_gb_exhausted = false;
+        unsigned        m_nl_strategy_idx = 0; // for fairness
         expr_ref_vector m_nl_new_exprs;
         typedef obj_map<expr, unsigned> var2num_occs;
         var2num_occs m_var2num_occs;
@@ -974,7 +966,7 @@ namespace smt {
         /**
            \brief A monomial is 'pure' if does not have a numeric coefficient.
         */
-        bool is_pure_monomial(expr * m) const { return m_util.is_mul(m) && (to_app(m)->get_num_args() > 2 || !m_util.is_numeral(to_app(m)->get_arg(0))); }
+        bool is_pure_monomial(expr * m) const;
         bool is_pure_monomial(theory_var v) const { return is_pure_monomial(get_enode(v)->get_expr()); }
         void mark_var(theory_var v, svector<theory_var> & vars, var_set & already_found);
         void mark_dependents(theory_var v, svector<theory_var> & vars, var_set & already_found, row_set & already_visited_rows);

@@ -15,6 +15,7 @@ Copyright (c) 2015 Microsoft Corporation
 #include "smt/smt_context.h"
 #include "ast/expr_abstract.h"
 #include "ast/rewriter/expr_safe_replace.h"
+#include <iostream>
 
 static expr_ref parse_fml(ast_manager& m, char const* str) {
     expr_ref result(m);
@@ -376,6 +377,9 @@ static void add_random_ineq(
     case opt::t_mod:
         NOT_IMPLEMENTED_YET();        
         break;        
+    default:
+        NOT_IMPLEMENTED_YET();        
+        break;                
     }
     fmls.push_back(fml);
     mbo.add_constraint(vars, rational(coeff), rel);
