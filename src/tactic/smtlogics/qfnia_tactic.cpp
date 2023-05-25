@@ -112,9 +112,8 @@ static tactic * mk_qfnia_smt_solver(ast_manager& m, params_ref const& p) {
         mk_smt_tactic(m));
 }
 
-tactic * mk_qfnia_tactic(ast_manager & m, params_ref const & p) {
+static tactic * mk_default_tactic(ast_manager & m, params_ref const & p) {
     return and_then(
-        mk_report_verbose_tactic("(qfnia-tactic)", 10),
         mk_qfnia_preamble(m, p),
         or_else(mk_qfnia_sat_solver(m, p),
                  try_for(mk_qfnia_smt_solver(m, p), 2000),
@@ -124,3 +123,15 @@ tactic * mk_qfnia_tactic(ast_manager & m, params_ref const & p) {
         ;
 }
 
+tactic * mk_qfnia_tactic(ast_manager & m, params_ref const & p) {
+    return and_then(
+        mk_report_verbose_tactic("(qfnia-tactic)", 10),
+        or_else(
+                 try_for(mk_default_tactic(m, p), 20000),
+                 try_for(mk_smt_tactic(m), 20000),
+                 try_for(mk_qfnra_nlsat_tactic(m, p), 90000),
+                 try_for(mk_smt_tactic(m), 200000),
+                 mk_default_tactic(m, p))
+                    )
+        ;
+}

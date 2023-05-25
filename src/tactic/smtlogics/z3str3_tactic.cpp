@@ -28,6 +28,7 @@ Notes:
 #include "smt/params/smt_params.h"
 #include "ast/ast_pp.h"
 #include "tactic/core/ctx_simplify_tactic.h"
+#include "tactic/smtlogics/qflia_tactic.h"
 
 
 
@@ -393,6 +394,55 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tree = or_else(tree, z3seq);
 
         tree = and_then(mk_ext_str_tactic(m, p), tree);
+
+        tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
+
+        return st;
+    } else if (m_smt_params.m_StrTactic == symbol("dAfterMid")) {
+        //std::cout << "arrMid" << std::endl;
+        //std::cout << "mid millisecond time: " << m_smt_params.m_MidMilliseconds << std::endl;
+        tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
+
+        tactic * arrMid = and_then(using_params(try_for(mk_smt_tactic(m), m_smt_params.m_MidMilliseconds), general_p), mk_fail_if_undecided_tactic());
+
+        z3seq = using_params(mk_smt_tactic(m), seq_p);
+
+        tactic * tree = or_else(z3seqBefore, arrMid);
+
+        tree = and_then(mk_ext_str_tactic(m, p), tree);
+
+        tree = or_else(tree, z3seq);
+
+        tree = and_then(mk_preamble_tactic(m), tree);
+
+        tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
+
+        return st;
+    } else if (m_smt_params.m_StrTactic == symbol("new3probe")) {
+        // don't apply ext_str_tactic before the regex probe, as it may introduce regexes
+
+        // seq_p.set_uint("seq.giveup_point", 7);
+        tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
+        // seq_p.set_uint("seq.giveup_point", 0);
+        tactic * z3seqAfter = using_params(mk_smt_tactic(m), seq_p);
+
+        tactic * innertree =
+            cond(mk_has_word_eq_probe(),
+                cond(mk_is_cf_probe(),
+                     or_else(z3str3_2, z3seqAfter),
+                     or_else(z3seqBefore, z3str3_2, z3seqAfter)),
+                z3seqAfter);
+
+        tactic * regextrue = or_else(z3seqBefore, z3str3_2, z3seqAfter);
+        tactic * regexfalse = innertree;
+        if (m_smt_params.m_RewriterTactic) {
+            regextrue = and_then(mk_ext_str_tactic(m, p), regextrue);
+            regexfalse = and_then(mk_ext_str_tactic(m, p), regexfalse);
+        }
+
+        tactic * tree = cond(mk_has_regex_probe(), regextrue, regexfalse);
+
+        tree = and_then(mk_preamble_tactic(m), tree);
 
         tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
 

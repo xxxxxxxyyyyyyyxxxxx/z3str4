@@ -1,6 +1,5 @@
 #include "tactic/tactical.h"
 #include "tactic/str/ext_str_tactic.h"
-// #include "tactic/generic_model_converter.h"
 #include "ast/ast_pp.h"
 #include "ast/rewriter/expr_replacer.h"
 #include "ast/rewriter/var_subst.h"

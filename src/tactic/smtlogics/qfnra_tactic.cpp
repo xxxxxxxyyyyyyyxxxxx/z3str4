@@ -32,7 +32,7 @@ static tactic * mk_qfnra_sat_solver(ast_manager& m, params_ref const& p, unsigne
                     mk_fail_if_undecided_tactic());
 }
 
-tactic * mk_qfnra_tactic(ast_manager & m, params_ref const& p) {
+static tactic * mk_default_tactic(ast_manager & m, params_ref const& p) {
     params_ref p0 = p;
     p0.set_bool("inline_vars", true);
     params_ref p1 = p;    
@@ -53,3 +53,11 @@ tactic * mk_qfnra_tactic(ast_manager & m, params_ref const& p) {
 }
 
 
+tactic * mk_qfnra_tactic(ast_manager & m, params_ref const& p) {
+    return or_else(
+            try_for(mk_default_tactic(m, p), 20000),
+            and_then(try_for(mk_smt_tactic(m), 20000),mk_fail_if_undecided_tactic()),
+            try_for(mk_qfnra_nlsat_tactic(m, p), 90000),
+            and_then(try_for(mk_smt_tactic(m), 200000),mk_fail_if_undecided_tactic()),
+            mk_default_tactic(m, p));
+}
