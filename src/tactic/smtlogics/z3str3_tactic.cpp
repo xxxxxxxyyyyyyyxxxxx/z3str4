@@ -418,7 +418,7 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         tactic * st = using_params(and_then(mk_simplify_tactic(m, p), tree), p);
 
         return st;
-    } else if (m_smt_params.m_StrTactic == symbol("new3probe")) {
+    } else if (m_smt_params.m_StrTactic == symbol("newprobe")) {
         // don't apply ext_str_tactic before the regex probe, as it may introduce regexes
 
         // seq_p.set_uint("seq.giveup_point", 7);
