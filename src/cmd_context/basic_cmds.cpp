@@ -288,10 +288,10 @@ ATOMIC_CMD(reset_assertions_cmd, "reset-assertions", "reset all asserted formula
 UNARY_CMD(set_logic_cmd, "set-logic", "<symbol>", "set the background logic.", CPK_SYMBOL, symbol const &,
           if (ctx.set_logic(arg))
               ctx.print_success();
-          else {
-              std::string msg = "ignoring unsupported logic " + arg.str();
-              ctx.print_unsupported(symbol(msg), m_line, m_pos);
-          }
+        //   else {
+        //       std::string msg = "ignoring unsupported logic " + arg.str();
+        //       ctx.print_unsupported(symbol(msg), m_line, m_pos);
+        //   }
           );
 
 UNARY_CMD(pp_cmd, "display", "<term>", "display the given term.", CPK_EXPR, expr *, {
