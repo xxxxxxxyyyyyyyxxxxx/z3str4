@@ -403,6 +403,8 @@ tactic * mk_z3str3_tactic(ast_manager & m, params_ref const & p) {
         //std::cout << "mid millisecond time: " << m_smt_params.m_MidMilliseconds << std::endl;
         tactic * z3seqBefore = using_params(try_for(mk_smt_tactic(m), m_smt_params.m_PreMilliseconds), seq_p);
 
+        z3seqBefore = and_then(z3seqBefore, mk_fail_if_undecided_tactic());
+
         tactic * arrMid = and_then(using_params(try_for(mk_smt_tactic(m), m_smt_params.m_MidMilliseconds), general_p), mk_fail_if_undecided_tactic());
 
         z3seq = using_params(mk_smt_tactic(m), seq_p);
