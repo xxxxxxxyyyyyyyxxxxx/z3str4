@@ -1,8 +1,14 @@
 z3_add_component(str_tactics
   SOURCES
     ext_str_tactic.cpp
+    ext_strToWE_tactic.cpp
+    ext_strToRegex_tactic.cpp
+    ext_strSimplify_tactic.cpp
   COMPONENT_DEPENDENCIES
     tactic
   TACTIC_HEADERS
     ext_str_tactic.h
+    ext_strToWE_tactic.h
+    ext_strToRegex_tactic.h
+	ext_strSimplify_tactic.h
 )
