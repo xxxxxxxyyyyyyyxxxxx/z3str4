@@ -7,7 +7,7 @@ z3_add_component(str_tactics
   COMPONENT_DEPENDENCIES
     tactic
   TACTIC_HEADERS
-    ext_str_tactic.h
+	ext_str_tactic.h
     ext_strToWE_tactic.h
     ext_strToRegex_tactic.h
 	ext_strSimplify_tactic.h
