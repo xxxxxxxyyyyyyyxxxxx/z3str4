@@ -72,7 +72,7 @@ struct z3_replayer::imp {
 
     void check_arg(unsigned pos, value_kind k) const {
         if (pos >= m_args.size()) {
-            TRACE("z3_replayer", tout << "too few arguments " << m_args.size() << " expecting " << kind2string(k) << "\n";);
+            TRACE("z3_replayer", tout << pos << " too few arguments " << m_args.size() << " expecting " << kind2string(k) << "\n";);
             throw z3_replayer_exception("invalid argument reference");
         }
         if (m_args[pos].m_kind != k) {
@@ -80,7 +80,7 @@ struct z3_replayer::imp {
             strm << "expecting " << kind2string(k) << " at position "
                  << pos << " but got " << kind2string(m_args[pos].m_kind);
             TRACE("z3_replayer", tout << strm.str() << "\n";);
-            throw z3_replayer_exception(strm.str());
+            throw z3_replayer_exception(std::move(strm).str());
         }
     }
 
@@ -528,6 +528,9 @@ struct z3_replayer::imp {
                 }
                 catch (z3_error & ex) {
                     throw ex;
+                }
+                catch (z3_replayer_exception &) {
+                    throw;
                 }
                 catch (z3_exception & ex) {
                     std::cout << "[z3 exception]: " << ex.msg() << std::endl;

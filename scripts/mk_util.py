@@ -314,6 +314,26 @@ def test_fpmath(cc):
         FPMATH_FLAGS=""
         return "UNKNOWN"
 
+def test_atomic_required(cc):
+    t = TempFile('tstatomic.cpp')
+    t.add("""
+    #include <atomic>
+    std::atomic<int> x;
+    std::atomic<short> y;
+    std::atomic<char> z;
+    std::atomic<long long> w;
+    int main() {
+        ++z;
+        ++y;
+        ++w;
+        return ++x;
+    }
+    """)
+    t.commit()
+    fails_without = exec_compiler_cmd([cc, CPPFLAGS, '', 'tstatomic.cpp', LDFLAGS, '']) != 0
+    ok_with = exec_compiler_cmd([cc, CPPFLAGS, '', 'tstatomic.cpp', LDFLAGS + ' -latomic', '']) == 0
+    return fails_without and ok_with
+
 
 def find_jni_h(path):
     for root, dirs, files in os.walk(path):
@@ -395,7 +415,7 @@ def check_java():
     else:
         # Search for jni.h in the library directories...
         t = open('errout', 'r')
-        open_pat = re.compile("\[search path for class files: (.*)\]")
+        open_pat = re.compile(r"\[search path for class files: (.*)\]")
         cdirs = []
         for line in t:
             m = open_pat.match(line)
@@ -555,19 +575,19 @@ def set_version(major, minor, build, revision):
             print("Set Assembly Version (BUILD):", VER_MAJOR, VER_MINOR, VER_BUILD, VER_TWEAK)
             return
 
-    # use parameters to set up version if not provided by script args            
+    # use parameters to set up version if not provided by script args
     VER_MAJOR = major
     VER_MINOR = minor
     VER_BUILD = build
     VER_TWEAK = revision
 
-    # update VER_TWEAK base on github     
+    # update VER_TWEAK base on github
     if GIT_DESCRIBE:
         branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
         VER_TWEAK = int(check_output(['git', 'rev-list', '--count', 'HEAD']))
-    
+
     print("Set Assembly Version (DEFAULT):", VER_MAJOR, VER_MINOR, VER_BUILD, VER_TWEAK)
-    
+
 def get_version():
     return (VER_MAJOR, VER_MINOR, VER_BUILD, VER_TWEAK)
 
@@ -812,8 +832,8 @@ def parse_options():
 def extract_c_includes(fname):
     result = {}
     # We look for well behaved #include directives
-    std_inc_pat     = re.compile("[ \t]*#include[ \t]*\"(.*)\"[ \t]*")
-    system_inc_pat  = re.compile("[ \t]*#include[ \t]*\<.*\>[ \t]*")
+    std_inc_pat     = re.compile(r"[ \t]*#include[ \t]*\"(.*)\"[ \t]*")
+    system_inc_pat  = re.compile(r"[ \t]*#include[ \t]*\<.*\>[ \t]*")
     # We should generate and error for any occurrence of #include that does not match the previous pattern.
     non_std_inc_pat = re.compile(".*#include.*")
 
@@ -1720,7 +1740,7 @@ class DotNetDLLComponent(Component):
 
         print("Version output to csproj:", version)
 
-        core_csproj_str = """<Project Sdk="Microsoft.NET.Sdk">
+        core_csproj_str = r"""<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard1.4</TargetFramework>
@@ -1736,6 +1756,7 @@ class DotNetDLLComponent(Component):
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <Description>Z3 is a satisfiability modulo theories solver from Microsoft Research.</Description>
     <Copyright>Copyright Microsoft Corporation. All rights reserved.</Copyright>
@@ -1745,9 +1766,10 @@ class DotNetDLLComponent(Component):
 
   <ItemGroup>
     <Compile Include="..\%s\*.cs;*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
+    <None Include="..\%s\README.md" Pack="true" PackagePath="/"/>
   </ItemGroup>
 
-</Project>""" % (version, key, self.to_src_dir)
+</Project>""" % (version, key, self.to_src_dir, self.to_src_dir)
 
         mk_dir(os.path.join(BUILD_DIR, 'dotnet'))
         csproj = os.path.join('dotnet', 'z3.csproj')
@@ -1856,7 +1878,7 @@ class JavaDLLComponent(Component):
                           os.path.join('api', 'java', 'Native'))
             elif IS_OSX and IS_ARCH_ARM64:
                 out.write('\t$(SLINK) $(SLINK_OUT_FLAG)libz3java$(SO_EXT) $(SLINK_FLAGS) -arch arm64 %s$(OBJ_EXT) libz3$(SO_EXT)\n' %
-                          os.path.join('api', 'java', 'Native'))                
+                          os.path.join('api', 'java', 'Native'))
             else:
                 out.write('\t$(SLINK) $(SLINK_OUT_FLAG)libz3java$(SO_EXT) $(SLINK_FLAGS) %s$(OBJ_EXT) libz3$(SO_EXT)\n' %
                           os.path.join('api', 'java', 'Native'))
@@ -2246,7 +2268,7 @@ class DotNetExampleComponent(ExampleComponent):
             else:
                 platform = 'x86'
 
-            dotnet_proj_str = """<Project Sdk="Microsoft.NET.Sdk">
+            dotnet_proj_str = r"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
@@ -2519,19 +2541,19 @@ def mk_config():
                 'SLINK_FLAGS=/nologo /LDd\n' % static_opt)
             if VS_X64:
                 config.write(
-                    'CXXFLAGS=/c %s /W3 /WX- /Od /Oy- /D _DEBUG /D Z3DEBUG /D _CONSOLE /D _TRACE /Gm- /RTC1 %s %s\n' % (CXXFLAGS, extra_opt, static_opt))
+                    'CXXFLAGS=/c %s /Zi /W3 /WX- /Od /Oy- /D _DEBUG /D Z3DEBUG /D _CONSOLE /D _TRACE /Gm- /RTC1 %s %s\n' % (CXXFLAGS, extra_opt, static_opt))
                 config.write(
-                    'LINK_EXTRA_FLAGS=/link /DEBUG /MACHINE:X64 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
-                    'SLINK_EXTRA_FLAGS=/link /DEBUG /MACHINE:X64 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (link_extra_opt, maybe_disable_dynamic_base, link_extra_opt))
+                    'LINK_EXTRA_FLAGS=/link /PROFILE /DEBUG:full /MACHINE:X64 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
+                    'SLINK_EXTRA_FLAGS=/link /PROFILE /DEBUG:full /MACHINE:X64 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (link_extra_opt, maybe_disable_dynamic_base, link_extra_opt))
             elif VS_ARM:
                 print("ARM on VS is unsupported")
                 exit(1)
             else:
                 config.write(
-                    'CXXFLAGS=/c %s /W3 /WX- /Od /Oy- /D _DEBUG /D Z3DEBUG /D _CONSOLE /D _TRACE /Gm- /RTC1 /arch:SSE2 %s %s\n' % (CXXFLAGS, extra_opt, static_opt))
+                    'CXXFLAGS=/c %s /Zi /W3 /WX- /Od /Oy- /D _DEBUG /D Z3DEBUG /D _CONSOLE /D _TRACE /Gm- /RTC1 /arch:SSE2 %s %s\n' % (CXXFLAGS, extra_opt, static_opt))
                 config.write(
-                    'LINK_EXTRA_FLAGS=/link /DEBUG /MACHINE:X86 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
-                    'SLINK_EXTRA_FLAGS=/link /DEBUG /MACHINE:X86 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (link_extra_opt, maybe_disable_dynamic_base, link_extra_opt))
+                    'LINK_EXTRA_FLAGS=/link /PROFILE /DEBUG:full /MACHINE:X86 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
+                    'SLINK_EXTRA_FLAGS=/link /PROFILE /DEBUG:full /MACHINE:X86 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (link_extra_opt, maybe_disable_dynamic_base, link_extra_opt))
         else:
             # Windows Release mode
             LTCG=' /LTCG' if SLOW_OPTIMIZE else ''
@@ -2544,19 +2566,19 @@ def mk_config():
                 extra_opt = '%s /D _TRACE ' % extra_opt
             if VS_X64:
                 config.write(
-                    'CXXFLAGS=/c%s %s /W3 /WX- /O2 /D _EXTERNAL_RELEASE /D NDEBUG /D _LIB /D UNICODE /Gm- /GF /Gy /TP %s %s\n' % (GL, CXXFLAGS, extra_opt, static_opt))
+                    'CXXFLAGS=/c%s %s /Zi /W3 /WX- /O2 /D _EXTERNAL_RELEASE /D NDEBUG /D _LIB /D UNICODE /Gm- /GF /Gy /TP %s %s\n' % (GL, CXXFLAGS, extra_opt, static_opt))
                 config.write(
-                    'LINK_EXTRA_FLAGS=/link%s /profile /MACHINE:X64 /SUBSYSTEM:CONSOLE /STACK:8388608 %s\n'
-                    'SLINK_EXTRA_FLAGS=/link%s /profile /MACHINE:X64 /SUBSYSTEM:WINDOWS /STACK:8388608 %s\n' % (LTCG, link_extra_opt, LTCG, link_extra_opt))
+                    'LINK_EXTRA_FLAGS=/link%s /PROFILE /DEBUG:full /profile /MACHINE:X64 /SUBSYSTEM:CONSOLE /STACK:8388608 %s\n'
+                    'SLINK_EXTRA_FLAGS=/link%s /PROFILE /DEBUG:full /profile /MACHINE:X64 /SUBSYSTEM:WINDOWS /STACK:8388608 %s\n' % (LTCG, link_extra_opt, LTCG, link_extra_opt))
             elif VS_ARM:
                 print("ARM on VS is unsupported")
                 exit(1)
             else:
                 config.write(
-                    'CXXFLAGS=/c%s %s /WX- /O2 /Oy- /D _EXTERNAL_RELEASE /D NDEBUG /D _CONSOLE /D ASYNC_COMMANDS /Gm- /arch:SSE2 %s %s\n' % (GL, CXXFLAGS, extra_opt, static_opt))
+                    'CXXFLAGS=/c%s %s /Zi /WX- /O2 /Oy- /D _EXTERNAL_RELEASE /D NDEBUG /D _CONSOLE /D ASYNC_COMMANDS /Gm- /arch:SSE2 %s %s\n' % (GL, CXXFLAGS, extra_opt, static_opt))
                 config.write(
-                    'LINK_EXTRA_FLAGS=/link%s /DEBUG /MACHINE:X86 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
-                    'SLINK_EXTRA_FLAGS=/link%s /DEBUG /MACHINE:X86 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (LTCG, link_extra_opt, LTCG, maybe_disable_dynamic_base, link_extra_opt))
+                    'LINK_EXTRA_FLAGS=/link%s /PROFILE /DEBUG:full /MACHINE:X86 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 /DYNAMICBASE /NXCOMPAT %s\n'
+                    'SLINK_EXTRA_FLAGS=/link%s /PROFILE /DEBUG:full /MACHINE:X86 /SUBSYSTEM:WINDOWS /INCREMENTAL:NO /STACK:8388608 /OPT:REF /OPT:ICF /TLBID:1 %s %s\n' % (LTCG, link_extra_opt, LTCG, maybe_disable_dynamic_base, link_extra_opt))
 
         config.write('CFLAGS=$(CXXFLAGS)\n')
 
@@ -2598,6 +2620,9 @@ def mk_config():
         CXXFLAGS = '%s -fvisibility=hidden -fvisibility-inlines-hidden -c' % CXXFLAGS
         FPMATH = test_fpmath(CXX)
         CXXFLAGS = '%s %s' % (CXXFLAGS, FPMATH_FLAGS)
+        atomic_required = test_atomic_required(CXX)
+        if atomic_required:
+            LDFLAGS  = '%s -latomic' % LDFLAGS
         if LOG_SYNC:
             CXXFLAGS = '%s -DZ3_LOG_SYNC' % CXXFLAGS
         if SINGLE_THREADED:
@@ -2664,7 +2689,7 @@ def mk_config():
             LDFLAGS = '%s -static-libgcc -static-libstdc++' % LDFLAGS
         if sysname == 'Linux' and machine.startswith('armv7') or machine.startswith('armv8'):
             CXXFLAGS = '%s -fpic' % CXXFLAGS
-        if IS_OSX and IS_ARCH_ARM64:
+        if IS_ARCH_ARM64 and IS_OSX:
             print("Setting arm64")
             CXXFLAGS = '%s -arch arm64' % CXXFLAGS
             LDFLAGS = '%s -arch arm64' % LDFLAGS
@@ -2708,6 +2733,7 @@ def mk_config():
             print('Prefix:         %s' % PREFIX)
             print('64-bit:         %s' % is64())
             print('FP math:        %s' % FPMATH)
+            print('libatomic:      %s' % ('required' if atomic_required else 'not required'))
             print("Python pkg dir: %s" % PYTHON_PACKAGE_DIR)
             if GPROF:
                 print('gprof:          enabled')
@@ -2852,7 +2878,7 @@ def update_version():
     revision = VER_TWEAK
 
     print("UpdateVersion:", get_full_version_string(major, minor, build, revision))
-    
+
     if major is None or minor is None or build is None or revision is None:
         raise MKException("set_version(major, minor, build, revision) must be used before invoking update_version()")
     if not ONLY_MAKEFILES:
@@ -2992,9 +3018,19 @@ def cp_z3py_to_build():
         for f in files:
             if f.endswith('.pyc'):
                 rmf(os.path.join(root, f))
+    # We do not want a second copy of the compiled files in the system-wide cache,
+    # so we disable it temporarily. This is an issue with recent versions of MacOS
+    # where XCode's Python has a cache, but the build scripts don't have access to
+    # it (e.g. during OPAM package installation).
+    have_cache = hasattr(sys, 'pycache_prefix') and sys.pycache_prefix is not None
+    if have_cache:
+        pycache_prefix_before = sys.pycache_prefix
+        sys.pycache_prefix = None
     # Compile Z3Py files
     if compileall.compile_dir(z3py_src, force=1) != 1:
         raise MKException("failed to compile Z3Py sources")
+    if have_cache:
+        sys.pycache_prefix = pycache_prefix_before
     if is_verbose:
         print("Generated python bytecode")
     # Copy sources to build
@@ -3056,7 +3092,7 @@ def mk_bindings(api_files):
           z3py_output_dir=get_z3py_dir(),
           dotnet_output_dir=dotnet_output_dir,
           java_input_dir=java_input_dir,
-          java_output_dir=java_output_dir,                                  
+          java_output_dir=java_output_dir,
           java_package_name=java_package_name,
           ml_output_dir=ml_output_dir,
           ml_src_dir=ml_output_dir
@@ -3162,7 +3198,7 @@ def mk_vs_proj_property_groups(f, name, target_ext, type):
     f.write('    <Keyword>Win32Proj</Keyword>\n')
     f.write('    <PlatformToolset>%s</PlatformToolset>\n' % get_platform_toolset_str())
     f.write('  </PropertyGroup>\n')
-    f.write('  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />\n')
+    f.write('  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.Default.props" />\n')
     f.write('  <PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'" Label="Configuration">\n')
     f.write('    <ConfigurationType>%s</ConfigurationType>\n' % type)
     f.write('    <CharacterSet>Unicode</CharacterSet>\n')
@@ -3173,24 +3209,24 @@ def mk_vs_proj_property_groups(f, name, target_ext, type):
     f.write('    <CharacterSet>Unicode</CharacterSet>\n')
     f.write('    <UseOfMfc>false</UseOfMfc>\n')
     f.write('  </PropertyGroup>\n')
-    f.write('  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />\n')
+    f.write('  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.props" />\n')
     f.write('  <ImportGroup Label="ExtensionSettings" />\n')
     f.write('   <ImportGroup Label="PropertySheets">\n')
-    f.write('    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists(\'$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props\')" Label="LocalAppDataPlatform" />  </ImportGroup>\n')
+    f.write('    <Import Project="$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props" Condition="exists(\'$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\')" Label="LocalAppDataPlatform" />  </ImportGroup>\n')
     f.write('  <PropertyGroup Label="UserMacros" />\n')
     f.write('  <PropertyGroup>\n')
-    f.write('    <OutDir Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'">$(SolutionDir)\$(ProjectName)\$(Configuration)\</OutDir>\n')
+    f.write('    <OutDir Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'">$(SolutionDir)\\$(ProjectName)\\$(Configuration)\\</OutDir>\n')
     f.write('    <TargetName Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'">%s</TargetName>\n' % name)
     f.write('    <TargetExt Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'">.%s</TargetExt>\n' % target_ext)
-    f.write('    <OutDir Condition="\'$(Configuration)|$(Platform)\'==\'Release|Win32\'">$(SolutionDir)\$(ProjectName)\$(Configuration)\</OutDir>\n')
+    f.write('    <OutDir Condition="\'$(Configuration)|$(Platform)\'==\'Release|Win32\'">$(SolutionDir)\\$(ProjectName)\\$(Configuration)\\</OutDir>\n')
     f.write('    <TargetName Condition="\'$(Configuration)|$(Platform)\'==\'Release|Win32\'">%s</TargetName>\n' % name)
     f.write('    <TargetExt Condition="\'$(Configuration)|$(Platform)\'==\'Release|Win32\'">.%s</TargetExt>\n' % target_ext)
     f.write('  </PropertyGroup>\n')
     f.write('  <PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'Debug|Win32\'">\n')
-    f.write('        <IntDir>$(ProjectName)\$(Configuration)\</IntDir>\n')
+    f.write('        <IntDir>$(ProjectName)\\$(Configuration)\\</IntDir>\n')
     f.write('  </PropertyGroup>\n')
     f.write('  <PropertyGroup Condition="\'$(Configuration)|$(Platform)\'==\'Release|Win32\'">\n')
-    f.write('    <IntDir>$(ProjectName)\$(Configuration)\</IntDir>\n')
+    f.write('    <IntDir>$(ProjectName)\\$(Configuration)\\</IntDir>\n')
     f.write('  </PropertyGroup>\n')
 
 
@@ -3267,7 +3303,7 @@ def mk_vs_proj(name, components):
     mk_vs_proj_link_exe(f, name, debug=False)
     f.write('  </ItemDefinitionGroup>\n')
     mk_vs_proj_dep_groups(f, name, components)
-    f.write('  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />\n')
+    f.write('  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />\n')
     f.write('  <ImportGroup Label="ExtensionTargets">\n')
     f.write('  </ImportGroup>\n')
     f.write('</Project>\n')
@@ -3308,7 +3344,7 @@ def mk_vs_proj_dll(name, components):
     mk_vs_proj_link_dll(f, name, debug=False)
     f.write('  </ItemDefinitionGroup>\n')
     mk_vs_proj_dep_groups(f, name, components)
-    f.write('  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />\n')
+    f.write('  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />\n')
     f.write('  <ImportGroup Label="ExtensionTargets">\n')
     f.write('  </ImportGroup>\n')
     f.write('</Project>\n')

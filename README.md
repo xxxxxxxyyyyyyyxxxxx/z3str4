@@ -14,9 +14,9 @@ See the [release notes](RELEASE_NOTES.md) for notes on various stable releases o
 
 ## Build status
 
-| Azure Pipelines | Code Coverage | Open Bugs | Android Build | WASM Build | 
-| --------------- | --------------|-----------|---------------|------------|
-| [![Build Status](https://dev.azure.com/Z3Public/Z3/_apis/build/status/Z3Prover.z3?branchName=master)](https://dev.azure.com/Z3Public/Z3/_build/latest?definitionId=1&branchName=master) | [![CodeCoverage](https://github.com/Z3Prover/z3/actions/workflows/coverage.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/coverage.yml) | [![Open Issues](https://github.com/Z3Prover/z3/actions/workflows/wip.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/wip.yml) |[![Android Build](https://github.com/Z3Prover/z3/actions/workflows/android-build.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/android-build.yml) | [![WASM Build](https://github.com/Z3Prover/z3/actions/workflows/wasm.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/wasm.yml) |
+| Azure Pipelines | Code Coverage | Open Bugs | Android Build | WASM Build | Windows Build |
+| --------------- | --------------|-----------|---------------|------------|---------------|
+| [![Build Status](https://dev.azure.com/Z3Public/Z3/_apis/build/status/Z3Prover.z3?branchName=master)](https://dev.azure.com/Z3Public/Z3/_build/latest?definitionId=1&branchName=master) | [![CodeCoverage](https://github.com/Z3Prover/z3/actions/workflows/coverage.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/coverage.yml) | [![Open Issues](https://github.com/Z3Prover/z3/actions/workflows/wip.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/wip.yml) |[![Android Build](https://github.com/Z3Prover/z3/actions/workflows/android-build.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/android-build.yml) | [![WASM Build](https://github.com/Z3Prover/z3/actions/workflows/wasm.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/wasm.yml) | [![Windows](https://github.com/Z3Prover/z3/actions/workflows/Windows.yml/badge.svg)](https://github.com/Z3Prover/z3/actions/workflows/Windows.yml)
 
 <a href="https://github.com/z3prover/z3/pkgs/container/z3">Docker image</a>.
 
@@ -226,10 +226,11 @@ to Z3's C API. For more information, see [MachineArithmetic/README.md](https://g
 * Default input format is [SMTLIB2](http://smtlib.cs.uiowa.edu)
 
 * Other native foreign function interfaces:
-* [C++ API](https://z3prover.github.io/api/html/group__cppapi.html)
+* [C++ API](https://z3prover.github.io/api/html/namespacez3.html)
 * [.NET API](https://z3prover.github.io/api/html/namespace_microsoft_1_1_z3.html)
 * [Java API](https://z3prover.github.io/api/html/namespacecom_1_1microsoft_1_1z3.html)
 * [Python API](https://z3prover.github.io/api/html/namespacez3py.html) (also available in [pydoc format](https://z3prover.github.io/api/html/z3.html))
+* [Rust](https://github.com/prove-rs/z3.rs)
 * C
 * OCaml
 * [Julia](https://github.com/ahumenberger/Z3.jl)
