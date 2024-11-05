@@ -16,6 +16,7 @@ Author:
 Revision History:
 
 --*/
+
 #include "smt/smt_context.h"
 #include "ast/ast_ll_pp.h"
 #include "ast/ast_pp.h"
@@ -87,6 +88,11 @@ namespace smt {
         return r;
     }
 
+    void context::display_asserted_formulas(
+        std::ostream &out, std::unordered_map<unsigned, unsigned> &ids) const {
+        get_pp_visited().reset();
+        m_asserted_formulas.display_ll(out, get_pp_visited(), ids);
+    }
     void context::display_asserted_formulas(std::ostream & out) const {
         m_asserted_formulas.display_ll(out, get_pp_visited());
     }
@@ -158,7 +164,7 @@ namespace smt {
     void context::display_enode_defs(std::ostream & out) const {
         for (enode * x : m_enodes) {
             expr * n = x->get_expr();
-            ast_def_ll_pp(out, m, n, get_pp_visited(), true, false);
+            // ast_def_ll_pp(out, m, n, get_pp_visited(), true, false);
         }
     }
 
@@ -166,7 +172,7 @@ namespace smt {
         unsigned num = get_num_bool_vars();
         for (unsigned v = 0; v < num; v++) {
             expr * n = m_bool_var2expr[v];
-            ast_def_ll_pp(out << v << " ", m, n, get_pp_visited(), true, false);
+            // ast_def_ll_pp(out << v << " ", m, n, get_pp_visited(), true, false);
         }
     }
 

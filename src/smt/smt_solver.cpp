@@ -42,6 +42,20 @@ namespace {
                 m_round(0),
                 m_result(s.get_manager()),
                 m_depth(s.m_smt_params.m_cube_depth) {}
+            expr_ref cube(int id) {
+                if (m_round == 0) {
+                    m_result = m_solver.m_context.cubes(m_depth, id);
+                }
+                expr_ref r(m_result.m());
+                if (m_round < m_result.size()) {
+                    r = m_result.get(m_round);
+                }
+                else {
+                    r = m_result.m().mk_false();
+                }
+                ++m_round;
+                return r;
+            }
             expr_ref cube() {
                 if (m_round == 0) {
                     m_result = m_solver.m_context.cubes(m_depth);
@@ -335,6 +349,28 @@ namespace {
         expr* congruence_root(expr* e) override { return m_context.congruence_root(e); }
 
 
+        expr_ref_vector cube(expr_ref_vector& vars, unsigned cutoff, int id)  {
+            ast_manager& m = get_manager();
+            if (!m_cuber) {
+                m_cuber = alloc(cuber, *this);
+                // force propagation
+                push_core();
+                pop_core(1);
+            }
+            expr_ref result = m_cuber->cube(id);
+            expr_ref_vector lits(m);
+            if (m.is_false(result)) {
+                dealloc(m_cuber);
+                m_cuber = nullptr;
+            }
+            if (m.is_true(result)) {
+                dealloc(m_cuber);
+                m_cuber = nullptr;
+                return lits;
+            }
+            lits.push_back(result);
+            return lits;
+        }
         expr_ref_vector cube(expr_ref_vector& vars, unsigned cutoff) override {
             ast_manager& m = get_manager();
             if (!m_cuber) {

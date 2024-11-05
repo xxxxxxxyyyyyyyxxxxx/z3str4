@@ -33,13 +33,17 @@ namespace smt {
         double get_score();
 
         void choose_rec(expr_ref_vector& trail, expr_ref_vector& result, unsigned depth, unsigned budget);
+        void choose_rec(expr_ref_vector& trail, expr_ref_vector& result, unsigned depth, unsigned budget, int id);
+        unsigned count_satisfied_clauses(context& pctx);
 
     public:
         lookahead(context& ctx);
 
         expr_ref choose(unsigned budget = 2000);
+        expr_ref choose(unsigned budget, int id);
 
         expr_ref_vector choose_rec(unsigned depth);
+        expr_ref_vector choose_rec(unsigned depth, int id);
 
     };
 }

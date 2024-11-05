@@ -14,7 +14,7 @@ Author:
     Leonardo (leonardo) 2012-10-21
 
 Notes:
-   
+
     This file was called default_solver.h. It was a bad name.
 
 --*/

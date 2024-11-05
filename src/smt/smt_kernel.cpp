@@ -51,6 +51,10 @@ namespace smt {
         
     };
 
+    expr_ref_vector kernel::cubes(unsigned depth, int id) {
+        lookahead lh(m_imp->m_kernel);
+        return lh.choose_rec(depth, id);
+    }        
     kernel::kernel(ast_manager & m, smt_params & fp, params_ref const & p) {
         m_imp = alloc(imp, m, fp, p);
     }

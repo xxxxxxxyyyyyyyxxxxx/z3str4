@@ -357,10 +357,19 @@ void asserted_formulas::display(std::ostream & out) const {
     out << "inconsistent: " << inconsistent() << "\n";
 }
 
+void asserted_formulas::display_ll(
+    std::ostream &out, ast_mark &pp_visited,
+    std::unordered_map<unsigned, unsigned> &ids) const {
+    if (!m_formulas.empty()) {
+        for (justified_expr const &f : m_formulas) {
+            ast_def_ll_pp(out, m, f.get_fml(), pp_visited, ids, true, false);
+        }
+    }
+}
 void asserted_formulas::display_ll(std::ostream & out, ast_mark & pp_visited) const {
     if (!m_formulas.empty()) {
-        for (justified_expr const& f : m_formulas)
-            ast_def_ll_pp(out, m, f.get_fml(), pp_visited, true, false);
+        // for (justified_expr const& f : m_formulas)
+        //     ast_def_ll_pp(out, m, f.get_fml(), pp_visited, true, false);
         out << "asserted formulas:\n";
         for (justified_expr const& f : m_formulas)
             out << "#" << f.get_fml()->get_id() << " ";

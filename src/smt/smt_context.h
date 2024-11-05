@@ -18,6 +18,8 @@ Revision History:
 --*/
 #pragma once
 
+#include <map>
+#include <set>
 #include "ast/quantifier_stat.h"
 #include "smt/smt_clause.h"
 #include "smt/smt_setup.h"
@@ -76,7 +78,165 @@ namespace smt {
         friend class lookahead;
         friend class parallel;
     public:
-        statistics                  m_stats;
+        vector<vector<unsigned>> m_conflict_clauses;
+        bool first_search = true;
+        std::unordered_map<unsigned, unsigned> m_assignment_times;
+        std::unordered_map<unsigned, lbool> m_last_assignment;
+        std::unordered_map<unsigned, unsigned> m_opposite_assignment_counts;
+        std::unordered_map<unsigned, unsigned> m_var_in_2_clause_occurrences;
+        std::unordered_map<unsigned, unsigned> m_var_in_3_clause_occurrences;
+        std::unordered_map<unsigned, unsigned> m_var_in_4_clause_occurrences;
+        std::unordered_map<unsigned, unsigned> m_propagate_times;
+        std::unordered_map<unsigned, unsigned> m_decision_times;
+        std::unordered_map<unsigned, unsigned> m_conflict_times;
+        std::unordered_map<unsigned, unsigned> m_lemma_times;
+        svector<unsigned> m_vars;
+        unsigned m_variable_count = 0;
+        unsigned m_clause_count = 0;
+        int m_2_clause_count = 0;
+        int m_3_clause_count = 0;
+        int m_4_clause_count = 0;
+        int m_decision_count = 0;
+        int m_conflict_count = 0;
+        int m_propagation_count = 0;
+        int m_num_variables =0;
+        int m_num_clauses = 0;
+        int m_num_total_degree = 0;
+        
+        void count_lemma_occurrences(){
+            for(auto& cls: m_lemmas){
+                for(auto& lit: *cls){
+                    m_lemma_times[lit.var()]++;
+                }
+            }
+        }
+        int get_lemma_time(unsigned var) {
+            auto it = m_lemma_times.find(var);
+            if(it != m_lemma_times.end()){
+                return it->second;
+            }
+            return 0;
+        }
+        void count_conflict_occurrences() {
+            for(auto& cls: m_conflict_clauses){
+                for(auto& var: cls){
+                    m_conflict_times[var]++;
+                }
+            }
+        }
+        int get_conflict_time(unsigned var){
+            auto it = m_conflict_times.find(var);
+            if(it != m_conflict_times.end()){
+                return it->second;
+            }
+            return 0;
+        }
+        void count_degree(){
+            m_num_total_degree = 0;
+            std::set<unsigned> unique_vars;
+            for(auto& cls: m_aux_clauses){
+                m_num_total_degree += cls->get_num_literals();
+                for(auto& lit: *cls){
+                    unique_vars.insert(lit.var());
+                }
+            }
+            m_num_clauses = m_aux_clauses.size();
+            m_num_variables = unique_vars.size();
+        }
+        double get_average_clause_degree(){
+            return (double)m_num_total_degree / (double)m_num_clauses;
+        }
+        double get_average_variable_degree(){
+            return (double)m_num_total_degree / (double)m_num_variables;
+        }   
+        double get_conflict_decision_ration(){
+            return (double)m_conflict_count / (double)m_decision_count;
+        }
+        void count_var_in_clause_occurrences(svector<unsigned>& vars){
+            for(auto& cls: m_aux_clauses){
+                if(cls->get_num_literals() == 2){
+                    for(auto& lit: *cls){
+                        if(m_var_in_2_clause_occurrences.find(lit.var()) == m_var_in_2_clause_occurrences.end()){
+                            m_var_in_2_clause_occurrences[lit.var()] = 1;
+                        } else {
+                            m_var_in_2_clause_occurrences[lit.var()]++;
+                        }
+                    }
+                    m_2_clause_count++;
+                } else if(cls->get_num_literals() == 3){
+                    for(auto& lit: *cls){
+                        if(m_var_in_3_clause_occurrences.find(lit.var()) == m_var_in_3_clause_occurrences.end()){
+                            m_var_in_3_clause_occurrences[lit.var()] = 1;
+                        } else {
+                            m_var_in_3_clause_occurrences[lit.var()]++;
+                        }
+                    }
+                    m_3_clause_count++;
+                } else if(cls->get_num_literals() == 4){
+                    for(auto& lit: *cls){
+                        if(m_var_in_4_clause_occurrences.find(lit.var()) == m_var_in_4_clause_occurrences.end()){
+                            m_var_in_4_clause_occurrences[lit.var()] = 1;
+                        } else {
+                            m_var_in_4_clause_occurrences[lit.var()]++;
+                        }
+                    }
+                    m_4_clause_count++;
+                }
+            }            
+        }
+        unsigned get_var_in_2_clause_occurrences(unsigned var){
+            auto it = m_var_in_2_clause_occurrences.find(var);
+            if(it != m_var_in_2_clause_occurrences.end()){
+                return it->second;
+            }
+            return 0;
+        }
+        unsigned get_var_in_3_clause_occurrences(unsigned var){
+            auto it = m_var_in_3_clause_occurrences.find(var);
+            if(it != m_var_in_3_clause_occurrences.end()){
+                return it->second;
+            }
+            return 0;
+        }
+        unsigned get_var_in_4_clause_occurrences(unsigned var){
+            auto it = m_var_in_4_clause_occurrences.find(var);
+            if(it != m_var_in_4_clause_occurrences.end()){
+                return it->second;
+            }
+            return 0;
+        }
+        double get_propagate_decision_ration(unsigned var){
+            auto it1 = m_propagate_times.find(var);
+            auto it2 = m_decision_times.find(var);
+            if(it1 != m_propagate_times.end() && it2 != m_decision_times.end()){
+                return (double)it1->second / (double)it2->second;
+            }
+            return 0;
+        }
+        void add_conflict_clause(literal_vector const& clause) {
+            vector<unsigned> bool_vars;
+            for (literal lit : clause) {
+                bool_vars.push_back(lit.var());
+            }
+            m_conflict_clauses.push_back(bool_vars);
+        }
+
+        unsigned get_assignment_time(unsigned var) const {
+            auto it = m_assignment_times.find(var);
+            if (it != m_assignment_times.end()) {
+                return it->second;
+            }
+            return 0; // or some other value indicating the variable was never assigned
+        }
+        unsigned get_opposite_assignment_count(unsigned var) const {
+            auto it = m_opposite_assignment_counts.find(var);
+            if (it != m_opposite_assignment_counts.end()) {
+                return it->second;
+            }
+            return 0; // or some other value indicating the variable was never assigned an opposite value
+        }
+    statistics m_stats;
+
 
         std::ostream& display_last_failure(std::ostream& out) const;
         std::string last_failure_as_string() const;
@@ -1013,7 +1173,29 @@ namespace smt {
         void trace_assign(literal l, b_justification j, bool decision) const;
 
     public:
+
+        void display_asserted_formulas(
+        std::ostream &out, std::unordered_map<unsigned, unsigned> &ids) const;
         void assign(literal l, const b_justification & j, bool decision = false) {
+
+            if(first_search){
+                unsigned var = l.var();
+                if(!decision)
+                    m_assignment_times[var]++;
+                lbool new_assignment = get_assignment(l);
+                if(decision){
+                    m_decision_times[var]++;
+                    m_decision_count++;
+                }else
+                    m_propagate_times[var]++;
+                // Check if the new assignment is opposite to the last assignment
+                if (m_last_assignment.find(var) != m_last_assignment.end() &&
+                    m_last_assignment[var] != new_assignment) {
+                    m_opposite_assignment_counts[var]++;
+                }
+                // Update the last assignment
+                m_last_assignment[var] = new_assignment;
+            }
             SASSERT(l != false_literal);
             SASSERT(l != null_literal);
             switch (get_assignment(l)) {

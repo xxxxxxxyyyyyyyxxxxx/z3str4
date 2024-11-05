@@ -239,6 +239,7 @@ namespace smt {
         */
         expr_ref_vector cubes(unsigned depth);
 
+        expr_ref_vector cubes(unsigned depth, int id);
         /**
            \brief access congruence closure
         */

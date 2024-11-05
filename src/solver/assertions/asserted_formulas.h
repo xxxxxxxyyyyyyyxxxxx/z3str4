@@ -281,6 +281,9 @@ public:
     bool empty() const { return m_formulas.empty(); }
     void display(std::ostream & out) const;
     void display_ll(std::ostream & out, ast_mark & pp_visited) const;
+void display_ll(
+    std::ostream &out, ast_mark &pp_visited,
+    std::unordered_map<unsigned, unsigned> &ids) const;
     void collect_statistics(statistics & st) const;
     
     // -----------------------------------

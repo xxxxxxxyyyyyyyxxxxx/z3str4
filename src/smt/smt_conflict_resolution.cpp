@@ -454,6 +454,10 @@ namespace smt {
         TRACE("conflict_verbose", m_ctx.display_literals_verbose(tout << "after minimization:\n", m_lemma) << "\n";);
         TRACE("conflict_bug", m_ctx.display_literals_verbose(tout, m_lemma) << "\n";);
 
+        if(m_ctx.first_search){
+            m_ctx.add_conflict_clause(m_lemma);
+            m_ctx.m_conflict_count++;
+        }
         literal_vector::iterator it  = m_lemma.begin();
         literal_vector::iterator end = m_lemma.end();
         m_new_scope_lvl              = m_ctx.get_search_level();
