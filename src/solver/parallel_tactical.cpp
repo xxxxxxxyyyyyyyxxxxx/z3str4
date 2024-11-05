@@ -354,10 +354,10 @@ class parallel_tactic : public tactic {
             if (max_conflicts < 1000000)
                 max_conflicts *= std::max(m_depth, 1u);
             p.set_uint("inprocess.max", pp.simplify_inprocess_max() * mult);
-            p.set_uint("restart.max", pp.simplify_restart_max() * mult);
+            p.set_uint("restart.max", 15);
             p.set_bool("lookahead_simplify", m_depth > 2);
             p.set_bool("retain_blocked_clauses", retain_blocked);
-            p.set_uint("max_conflicts", max_conflicts);
+            p.set_uint("max_conflicts", 200);
             if (m_depth > 1) p.set_uint("bce_delay", 0);
             get_solver().updt_params(p);
         }
@@ -544,6 +544,7 @@ private:
         // simplify
         s.inc_depth(1);
         if (canceled(s)) return;
+        verbose_stream() << "call to simplify\n";
         switch (s.simplify()) {
         case l_undef: break;
         case l_true:  report_sat(s, nullptr); return;
